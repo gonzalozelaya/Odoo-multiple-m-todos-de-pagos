@@ -12,7 +12,7 @@
 
     <menuitem id="menu_mi_modelo" 
               name="Payment methods" 
-              parent="account.menu_finance_payables" 
+              parent="account.menu_action_account_payments_payable" 
               action="view_account_payment_form" />
     <!-- explicit list view definition -->
     <!--
