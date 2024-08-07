@@ -9,7 +9,7 @@
         Este modulo permite usar multiples metodos de pago en una sola orden
     """,
 
-    'author': "OutsourceArg SAS",
+    'author': "AAAAAAAAA",
     'website': "http://www.yourcompany.com",
     "license": "AGPL-3",
     'installable': True,
