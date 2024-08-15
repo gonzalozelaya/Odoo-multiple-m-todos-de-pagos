@@ -26,7 +26,6 @@
     },
     "depends": [
         "account",
-        # TODO mover esto a modulo puente
         "account_payment_pro",
     ],
 
@@ -34,7 +33,6 @@
     'data': [
         # 'security/ir.model.access.csv',
         'views/views.xml',
-        'views/templates.xml',
     ],
     # only loaded in demonstration mode
     'demo': [

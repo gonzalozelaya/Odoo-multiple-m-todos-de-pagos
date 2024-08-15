@@ -1,0 +1,22 @@
+<odoo>
+    <!-- Vista de Formulario Personalizada -->
+    <record id="view_custom_account_payment_register_form" model="ir.ui.view">
+        <field name="name">custom.account.payment.register.form</field>
+        <field name="model">custom.account.payment.register</field>
+        <field name="inherit_id" ref="account.account_payment_register_view"/>
+        <field name="arch" type="xml">
+           <!-- <xpath expr="//field[@name='amount']" position="after">
+                <field name="custom_field"/>
+            </xpath>-->
+            <!-- Personaliza más campos o secciones según sea necesario -->
+        </field>
+    </record>
+
+    <!-- Acción del Menú Personalizada -->
+    <record id="action_custom_account_payment_register" model="ir.actions.act_window">
+        <field name="name">Custom Payment Register</field>
+        <field name="res_model">custom.account.payment.register</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_custom_account_payment_register_form"/>
+    </record>
+</odoo>
