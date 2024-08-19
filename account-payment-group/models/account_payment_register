@@ -1,5 +1,0 @@
-from odoo import models, fields
-
-class CustomAccountPaymentRegister(models.TransientModel):
-    _name = 'custom.account.payment.register'
-    _inherit = 'account.payment.register'
