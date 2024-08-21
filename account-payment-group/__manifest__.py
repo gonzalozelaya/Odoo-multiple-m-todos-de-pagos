@@ -33,7 +33,7 @@
     'data': [
         # 'security/ir.model.access.csv',
         'views/views.xml',
-        'views/account_payment_register'
+        'views/account_payment_register.xml'
     ],
     # only loaded in demonstration mode
     'demo': [

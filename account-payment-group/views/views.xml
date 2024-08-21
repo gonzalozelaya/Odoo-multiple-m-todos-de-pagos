@@ -21,24 +21,59 @@
             <form>
                 <header>
                     <button name="ConfirmDebts" type="object" string="Pagar deudas" class="btn-primary"/>
+                    <button name="action_reconcile_payments" string="Conciliar Pagos" type="object" class="btn-primary"/>
                     <field name="state" widget="statusbar" statusbar_visible="debts,payments,draft,posted,cancelled"/>
                 </header>
                 <sheet>
                     <group>
-                        <field name="name"/>
+                        <group>
+                            <field name="name"/>
+                        </group>
+                        <group>
+                            <field name="partner_id"/>
+                            <field name="partner_type"/>
+                        </group>
+                        <group>
+                            <field name="company_id" invisible="1"/>
+                            <field name="company_regimenes_ganancias_ids" invisible="1"/>
+                            <label for="retencion_ganancias" invisible="not company_regimenes_ganancias_ids"/>
+                <div invisible="not company_regimenes_ganancias_ids">
+                    <field name="retencion_ganancias" class="oe_inline" readonly="state not in ['draft']" required="company_regimenes_ganancias_ids and state == 'draft'"/>
+                    <field name="regimen_ganancias_id" class="oe_inline" readonly="state not in ['draft']" invisible="retencion_ganancias != 'nro_regimen'" required="retencion_ganancias == 'nro_regimen' and company_regimenes_ganancias_ids and state == 'draft'" domain="[('id', 'in', company_regimenes_ganancias_ids)]" options='{"no_open": True, "no_create": True}'/>
+                </div>
+                        </group>
+                        <notebook>
+                            <page string="Debts">
+                                <button name="add_all" string="Añadir todo" type="object"/>
+                                <button name="remove_all" string="Remover todo" type="object"/>
+                                <field name="to_pay_move_line_ids" domain="[('account_id.reconcile', '=', True), 
+                                               ('partner_id', '=', partner_id),
+                                               ('reconciled', '=', False), 
+                                               ('full_reconcile_id', '=', False), 
+                                               ('company_id', '=', company_id), 
+                                               ('move_id.state', '=', 'posted'), 
+                                               ('account_id.account_type', '=', 'asset_receivable' if partner_type == 'customer' else 'liability_payable'), 
+                                               ('move_id.move_type', 'in', ['out_invoice', 'in_invoice'])]" 
+                                               help="Payment will be automatically matched with the oldest lines of this list (by maturity date). You can remove any line you dont want to be matched."/>
+                            </page>
+                            <page string="Pagos">
+                                <button name="add_payment" string="Añadir pago" type="object"/>
+                                <field name="to_pay_payment_ids" />
+                            </page>
+                            <page string="Retenciones">
+                                <field name="withholding_line_ids" >
+                                    <tree>
+                                        <field name="name"/>
+                                        <field name="amount"/>
+                                    </tree>
+                                </field>
+                            </page>
+                        </notebook>
+                        <group>
+                            <field name="selected_debt"/>
+                            <field name="to_pay_amount"/>
+                        </group>
                     </group>
-                    <group>
-                        <field name="partner_id"/>
-                        <field name="partner_type"/>
-                    </group>
-                    <group>
-                        <field name="company_id"/>
-                    </group>
-                    <notebook>
-                        <page string="Debts">
-                            <field name="to_pay_move_line_ids" domain="[('account_id.reconcile', '=', True),('partner_id', '=', partner_id),('reconciled', '=', False), ('full_reconcile_id', '=', False), ('company_id', '=', company_id), ('move_id.state', '=', 'posted'), ('account_id.account_type', '=', 'asset_receivable' if partner_type == 'customer' else 'liability_payable')]" help="Payment will be automatically matched with the oldest lines of this list (by maturity date). You can remove any line you dont want to be matched."/>
-                        </page>
-                    </notebook>
                 </sheet>
             </form>
         </field>
