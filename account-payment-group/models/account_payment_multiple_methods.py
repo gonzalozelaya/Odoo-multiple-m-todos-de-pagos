@@ -6,29 +6,32 @@ from odoo.exceptions import ValidationError, UserError
 class Account_payment_methods(models.Model):
     _name = 'account.payment.multiplemethods'
     date = fields.Date(string='Date')
+    
     company_id = fields.Many2one(
         comodel_name='res.company',
-        string='Company',
+        string='Empresa',
         required=True,
         default=lambda self: self.env.company,
     ) 
     company_currency_id = fields.Many2one(
         'res.currency',
-        string='Company Currency',
+        string='Divisa',
         compute='_compute_currency_id',
         store=True
     )
-    name = fields.Char(string='name')
+    name = fields.Char(string='',compute='_compute_name_sequence',readonly=True)
+    sequence_used = fields.Char(String='Sequence',compute='_compute_name_sequence',readonly=True)
     partner_type = fields.Selection([
-        ('customer', 'Customer'),
-        ('supplier', 'Vendor'),
-    ], default='customer', tracking=True, required=True)
-    payment_reference = fields.Char(string="Payment Reference", copy=False, tracking=True,
+        ('customer', 'Cliente'),
+        ('supplier', 'Proveedor'),
+    ], default='supplier', required=True)
+    
+    payment_reference = fields.Char(string="Referencia de pago", copy=False, tracking=True,
         help="Reference of the document used to issue this payment. Eg. check number, file name, etc.")
     
     partner_id = fields.Many2one(
         comodel_name='res.partner',
-        string="Customer/Vendor",
+        string="Proveedor",
         readonly=False)
     commercial_partner_id = fields.Many2one(
         'res.partner', string='Commercial Entity',
@@ -38,7 +41,7 @@ class Account_payment_methods(models.Model):
             'account_move_line_payment_to_pay_multiple_rel',
             'multiple_payment_id',
             'to_pay_line_id',
-            string="To Pay Lines",
+            string="Lineas a pagar",
              store=True,
             help='This lines are the ones the user has selected to be paid.',
             copy=False,
@@ -57,34 +60,62 @@ class Account_payment_methods(models.Model):
         'l10n_ar.payment.withholding', 'x_multiple_payment_id', string='Withholdings Lines',
         # compute='_compute_l10n_ar_withholding_line_ids', readonly=False, store=True
     )
-    
+    matched_move_line_ids = fields.Many2many(
+        'account.move.line',
+        compute='_compute_matched_move_line_ids',
+        help='Lines that has been matched to payments, only available after '
+        'payment validation',
+    )
     state = fields.Selection([
-        ('debts', 'Elegir Deudas'),
+        ('debts', 'Elegir Deudas'), 
         ('draft', 'Borrador'),
-        ('posted', 'Publicado'),
+        ('posted', 'Publicado'), 
         ('cancelled', 'Cancelado'),
     ], string='Status', default='debts')
 
     selected_debt = fields.Monetary(
         # string='To Pay lines Amount',
-        string='Selected Debt',
+        string='Deuda seleccionada',
         compute='_compute_selected_debt',
         currency_field='company_currency_id',
     )
     unreconciled_amount = fields.Monetary(
-        string='Adjustment / Advance',
+        string='Ajuste / Avance',
         currency_field='company_currency_id',
     )
     # reconciled_amount = fields.Monetary(compute='_compute_amounts')
     to_pay_amount = fields.Monetary(
         compute='_compute_to_pay_amount',
         inverse='_inverse_to_pay_amount',
-        string='To Pay Amount',
+        string='Monto a pagar',
         # string='Total To Pay Amount',
         readonly=True,
         currency_field='company_currency_id',
     )
-    
+    amount_company_currency_signed_pro = fields.Monetary(
+        currency_field='company_currency_id', compute='_compute_amount_company_currency_signed_pro',)
+
+    payment_total = fields.Monetary(
+        compute='_compute_payment_total',
+        string='Total a pagar',
+        currency_field='company_currency_id'
+    )
+    payment_difference = fields.Monetary(
+        compute='_compute_payment_difference',
+        readonly=True,
+        string="Diferencia",
+        currency_field='company_currency_id',
+        help="Difference between selected debt (or to pay amount) and "
+        "payments amount"
+    )
+    last_journal_used = fields.Many2one(
+        'account.journal',
+        string='Último Diario Utilizado',
+        compute='_compute_last_journal_used',
+        store=True
+    )
+    last_payment_method_line_id = fields.Many2one('account.payment.method.line', string='Último método de pago',
+        readonly=True,compute='_compute_last_payment_method_line_id')
 
 
     ###RETENCIONES
@@ -94,12 +125,14 @@ class Account_payment_methods(models.Model):
         ('no_aplica', 'No Aplica'),
         ('nro_regimen', 'Nro Regimen'),
     ],
-        'Retención Ganancias',
+        string='Retención Ganancias',
+        compute='_compute_retenciones_ganancias'
     )
     regimen_ganancias_id = fields.Many2one(
         'afip.tabla_ganancias.alicuotasymontos',
         'Regimen Ganancias',
         ondelete='restrict',
+        compute='_compute_regimen_ganancias_id',
     )
     selected_debt_untaxed = fields.Monetary(
         # string='To Pay lines Amount',
@@ -128,6 +161,101 @@ class Account_payment_methods(models.Model):
     """
 
     ###COMPUTE METHODS
+    @api.depends('state')
+    def _compute_name_sequence(self):
+        for record in self:
+            if record.state == 'debts':
+                record.name = 'New'
+                if record.sequence_used:
+                    record.sequence_used == record.sequence_used
+            elif record.state == 'draft':
+                record.name = 'Borrador'
+                if record.sequence_used:
+                    record.sequence_used == record.sequence_used
+            elif record.state == 'posted':
+                record.name = self.env['ir.sequence'].next_by_code('x_reporte_de_pagos') or 'New'
+                if record.sequence_used == False:
+                    record.sequence_used = record.name
+
+    @api.depends('state')
+    def _compute_matched_move_line_ids(self):
+        for record in self:
+            if record.state == 'posted':
+                payment_lines_accumulated = self.env['account.move.line']
+                for rec in record.to_pay_payment_ids:
+                    payment_lines = rec.line_ids.filtered(lambda x: x.account_type in self._get_valid_payment_account_types())
+                    debit_moves = payment_lines.mapped('matched_debit_ids.debit_move_id')
+                    credit_moves = payment_lines.mapped('matched_credit_ids.credit_move_id')
+                    debit_lines_sorted = debit_moves.filtered(lambda x: x.date_maturity != False).sorted(key=lambda x: (x.date_maturity, x.move_id.name))
+                    credit_lines_sorted = credit_moves.filtered(lambda x: x.date_maturity != False).sorted(key=lambda x: (x.date_maturity, x.move_id.name))
+                    debit_lines_without_date_maturity = debit_moves - debit_lines_sorted
+                    credit_lines_without_date_maturity = credit_moves - credit_lines_sorted
+                    payment_lines_accumulated |= payment_lines
+                record.matched_move_line_ids = ((debit_lines_sorted + debit_lines_without_date_maturity) | (credit_lines_sorted + credit_lines_without_date_maturity)) - payment_lines_accumulated
+            else:
+                record.matched_move_line_ids = False
+    @api.depends('to_pay_payment_ids')
+    def _compute_last_payment_method_line_id(self):
+        for record in self:
+            if record.to_pay_payment_ids:
+                last_payment = record.to_pay_payment_ids[-1]
+                record.last_payment_method_line_id = last_payment.payment_method_line_id
+            else:
+                record.last_payment_method_line_id = False
+    @api.depends('to_pay_payment_ids')
+    def _compute_last_journal_used(self):
+        for record in self:
+            if record.to_pay_payment_ids:
+                # Obtener el último pago en la lista to_pay_payment_ids
+                last_payment = record.to_pay_payment_ids[-1]
+                record.last_journal_used = last_payment.journal_id
+            else:
+                record.last_journal_used = False
+                
+    @api.depends('partner_id')
+    def _compute_retenciones_ganancias(self):
+        for rec in self:
+            if rec.partner_id.imp_ganancias_padron == 'AC':
+                rec.retencion_ganancias = 'nro_regimen'
+            else:
+                rec.retencion_ganancias = 'no_aplica'
+
+    @api.depends('retencion_ganancias')
+    def _compute_regimen_ganancias_id(self):
+        for rec in self:
+            if rec.partner_id and rec.retencion_ganancias == 'nro_regimen':
+                rec.regimen_ganancias_id = rec.partner_id.default_regimen_ganancias_id
+            else:
+                rec.regimen_ganancias_id = False
+
+    @api.depends('amount_company_currency_signed_pro')
+    def _compute_payment_total(self):
+        for rec in self:
+            rec.payment_total = rec.amount_company_currency_signed_pro + sum(rec.withholding_line_ids.mapped('amount'))
+        
+    @api.depends('to_pay_payment_ids')
+    def _compute_amount_company_currency_signed_pro(self):
+        """ new field similar to amount_company_currency_signed but:
+        1. is positive for payments to suppliers
+        2. we use the new field amount_company_currency instead of amount_total_signed, because amount_total_signed is
+        computed only after saving
+        We use l10n_ar prefix because this is a pseudo backport of future l10n_ar_withholding module """
+        for rec in self:
+            rec.amount_company_currency_signed_pro = 0
+            for payment in rec.to_pay_payment_ids:
+                if payment.payment_type == 'outbound' and payment.partner_type == 'customer' or \
+                        payment.payment_type == 'inbound' and payment.partner_type == 'supplier':
+                    rec.amount_company_currency_signed_pro += -payment.amount_company_currency
+                else:
+                    rec.amount_company_currency_signed_pro += payment.amount_company_currency
+                    
+    @api.depends('payment_total', 'to_pay_amount', 'amount_company_currency_signed_pro')
+    def _compute_payment_difference(self):
+        for rec in self:
+            rec.payment_difference = rec._get_payment_difference() - sum(self.withholding_line_ids.mapped('amount'))             
+    def _get_payment_difference(self):
+        return self.to_pay_amount - self.amount_company_currency_signed_pro
+       
     @api.depends(
         'to_pay_move_line_ids.amount_residual',
         'to_pay_move_line_ids.amount_residual_currency',
@@ -214,14 +342,24 @@ class Account_payment_methods(models.Model):
         for rec in self:
             rec._compute_withholdings()
         return
+    def reset_to_draft(self):
+        for record in self:
+            for payment in record.to_pay_payment_ids:
+                payment.action_draft()
+            record.state='draft'
+        return
     def cancel_payments(self):
         return
+    
     def add_payment(self):
         self.ensure_one()
         # Crear el asistente y llenar line_ids con to_pay_move_line_ids
         payment_register = self.env['custom.account.payment.register'].create({
             'line_ids': [(6, 0, self.to_pay_move_line_ids.ids)],
-            'multiple_payment_id': self.id,  # Aquí asignamos el ID del primer modelo
+            'multiple_payment_id': self.id,# Aquí asignamos el ID del primer modelo
+            'amount_received' : self.payment_difference,
+            'journal_id':self.last_journal_used.id,
+            'payment_method_line_id':self.last_payment_method_line_id.id,
         })
     
         # Devolver la acción para abrir el asistente en una ventana modal
@@ -235,6 +373,7 @@ class Account_payment_methods(models.Model):
             'res_id': payment_register.id,
             'context': {
                 'default_multiple_payment_id': self.id,
+                'default_amount_received' : self.payment_difference,
                 **self.env.context,
             },
         }
@@ -482,8 +621,18 @@ class Account_payment_methods(models.Model):
                 withholdable_advanced_amount = \
                     self.withholdable_advanced_amount
         return (withholdable_advanced_amount, withholdable_invoiced_amount)
-                
+
+    @api.model
+    def _get_valid_payment_account_types(self):
+        return ['asset_receivable', 'liability_payable']
 class l10nArPaymentRegisterWithholding(models.Model):
     _inherit = 'l10n_ar.payment.withholding'
     multiple_payment_id = fields.Many2one('account.payment.multiplemethods', required=True, ondelete='cascade')
 
+
+class AccountPayment(models.Model):
+    _inherit = 'account.payment'
+
+    def delete_payment(self):
+        self.ensure_one()
+        self.unlink()

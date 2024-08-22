@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="report_payment_with_withholdings_document">
+            <t t-call="web.external_layout">
+                <t t-set="o" t-value="o.with_context(lang=lang)"/>
+                <t t-set="custom_header" t-value="'l10n_ar.custom_header'"/>
+                <t t-set="report_date" t-value="o.date"/>
+                <t t-set="document_letter" t-value="'X'"/>
+                <t t-set="document_legend" t-value="'Doc. no válido como factura'"/>
+                <t t-set="report_number" t-value="o.name"/>
+                <t t-set="report_name" t-value="'Orden de pago'"/>
+                <t t-set="header_address" t-value="o.company_id.partner_id"/>
+                <t t-set="custom_footer">
+                    <div class="row">
+                        <div name="footer_left_column" class="col-8">
+                            <t t-if="not o.company_id.l10n_ar_report_signature">
+                                Observaciones: <!--<span t-field="o.ref"/>-->
+                            </t>
+                        </div>
+                        <div name="footer_right_column" class="col-4">
+                            <t t-if="not o.company_id.l10n_ar_report_signature">
+                                <span class="text-center">Firma y Aclaración</span>
+                            </t>
+                            <div class="text-right" name="pager" t-if="report_type == 'pdf'">
+                                Page: <span class="page"/> / <span class="topage"/>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+            <div class="page">
+                    <div id="informations" class="row mt8 mb8">
+                        <div class="col-6">
+    
+                            <!-- IDENTIFICACION (ADQUIRIENTE-LOCATARIO-PRESTARIO) -->
+    
+                            <!-- (14) Apellido uy Nombre: Denominicacion o Razon Soclial -->
+                            <strong><span t-out="'Proveedor: '"/></strong><span t-field="o.partner_id.name"/>
+    
+                            <!-- (15) Domicilio Comercial -->
+                            <br/>
+                            <span t-out="o.partner_id" t-options="{&quot;widget&quot;: &quot;contact&quot;, &quot;fields&quot;: [&quot;address&quot;], &quot;no_marker&quot;: True, &quot;no_tag_br&quot;: True}"/>
+    
+                            <!-- (16) Responsabilidad AFIP -->
+                            <strong>VAT Cond: </strong><span t-field="o.partner_id.l10n_ar_afip_responsibility_type_id"/>
+    
+                            <!-- (17) CUIT -->
+                            <t t-if="o.partner_id.vat and o.partner_id.l10n_latam_identification_type_id.name and o.partner_id.l10n_latam_identification_type_id.name != 'Sigd'">
+                                <br/><strong><t t-out="o.partner_id.l10n_latam_identification_type_id.name or o.company_id.country_id.vat_label" id="inv_tax_id_label"/>:</strong> <span t-out="o.partner_id.l10n_ar_formatted_vat or o.partner_id.vat"/>
+                            </t>
+    
+                        </div>
+                    </div>
+                </div>
+                <br/>
+                    <table class="table table-sm o_main_table" name="payments_table">
+                    <thead>
+                        <tr>
+                            <th><span>Pagos</span></th>
+                            <th><span>Método</span></th>
+                            <th>Nro.</th>
+                            <th>Fecha</th>
+                            <!-- TODO implementar el other currency -->
+                            <!-- <th class="text-right" t-if="any(o.mapped('payment_ids.other_currency'))"><span>Importe divisa</span></th> -->
+                            <th class="text-right"><span>Importe</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <t t-set="amount" t-value="0"/>
+                    <t t-foreach="o.withholding_line_ids" t-as="line">
+                            <t t-set="amount" t-value="amount + line.amount"/>
+                            <tr>
+                                <td>
+                                    <span t-out="&quot;%s - %s&quot; % (line.tax_id.name, line.name)"/>
+                                </td>
+                                
+                                <td><span> </span></td>
+                                <td><span> </span></td>
+                                <td><span> </span></td>
+                                <!-- <td class="text-right" t-if="o.other_currency">
+                                    <span class="text-nowrap" t-field="line.amount" t-field-options='{"widget": "monetary",  "display_currency": "o.currency_id"}'/>
+                                </td> -->
+                                <td class="text-right o_price_total">
+                                    <span class="text-nowrap" t-field="line.amount"/>
+                                </td>
+                            </tr>
+                        </t>
+                        <t t-foreach="o.to_pay_payment_ids" t-as="payment">
+                            <t t-set="amount" t-value="amount + payment.amount"/>
+                            <!-- TODO implementar cheques -->
+                            <!-- <t t-foreach="o.payment_ids.filtered(lambda x: x.payment_method_code in ['check_printing', 'new_third_party_checks', 'in_third_party_checks', 'out_third_party_checks']).sorted(key=lambda r:r.l10n_latam_check_payment_date or r.date)" t-as="line">
+                                <t t-set="check" t-value="line.l10n_latam_check_id or line"/>
+                                <tr>
+                                    <td>
+                                        <span t-out='"Cheque nro %s - %s - (%s)" % (check.check_number, check.l10n_latam_check_bank_id.name or check.journal_id.name, check.payment_method_line_id.name)'/><span t-if="check.l10n_latam_check_payment_date"> - Venc. <span t-field="check.l10n_latam_check_payment_date"/></span>
+                                   </td>
+                                    <td  class="text-right" t-if="any(o.mapped('payment_ids.other_currency'))">
+                                        <t t-if="check.currency_id">
+                                            <span class="text-nowrap" t-field="check.amount_signed" t-field-options='{"widget": "monetary",  "display_currency": "check.currency_id"}'/>
+                                        </t>
+                                    </td>
+                                    <td class="text-right o_price_total">
+                                        <span class="text-nowrap" t-field="check.l10n_ar_amount_company_currency_signed"/>
+                                    </td>
+                                </tr>
+                            </t> -->
+                              
+                            <tr> 
+                                <td>
+                                    <span t-if="payment.journal_id.id ==  153">Efectivo</span>
+                                    <span t-if="payment.journal_id.id !=  153" t-field="payment.journal_id.name"/>
+                                </td>
+                                <!-- <td class="text-right" t-if="any(o.mapped('payment_ids.other_currency'))">
+                                    <t t-if="line.other_currency">
+                                    <span class="text-nowrap" t-field="line.amount_signed" t-field-options='{"widget": "monetary",  "display_currency": "line.currency_id"}'/>
+                                    </t>
+                                </td> -->
+                                <td>
+                                    <span t-if="payment.payment_method_line_id" t-field="payment.payment_method_line_id"/>
+                                    <span t-if="not payment.payment_method_line_id"> - </span>
+                                </td>
+                                <td>
+                                    <span t-field="payment.l10n_latam_check_number"> </span>
+                                </td>
+        
+                                <td >
+                                    <span t-field="payment.l10n_latam_check_payment_date"> </span>
+                                </td>
+                
+                                <td class="text-right o_price_total">
+                                    <span class="text-nowrap" t-field="payment.amount"/>
+                                </td>
+                            </tr>
+                        </t>
+    
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td><strong><span>Total Pagado</span></strong></td>
+                            <td><span/></td>
+                            <td><span/></td>
+                            <td><span/></td>
+                            <!-- <td class="text-right" t-if="any(o.mapped('payment_ids.other_currency'))">
+                                <strong t-if="len(o.payment_ids.mapped('currency_id')) == 1 and o.payment_ids.mapped('currency_id') != o.currency_id"> <span class="text-nowrap" t-out="sum(o.payment_ids.mapped('amount_signed'))" t-options="{'widget': 'monetary', 'display_currency': o.payment_ids.mapped('currency_id')}"/></strong>
+                            </td> -->
+                            <td class="text-right">
+                                <strong><span t-esc="amount" t-options="{'widget': 'monetary', 'display_currency': o.company_currency_id}"/></strong>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <br/>
+                
+                <table class="table table-sm o_main_table" name="matching_table">
+                    <thead>
+                        <tr>
+                            <th><span>Comprobantes Imputados</span></th>
+                            <th class="text-center"><span>Fecha Venc.</span></th>
+                            <th class="text-right"><span>Total Comprobante</span></th>
+                            <th class="text-center">Ref. de pagos</th>
+                            <th class="text-right"><span>Importe Imputado</span></th>
+                            <th class="text-right"><span>Saldo</span></th>
+    
+                        </tr>
+                    </thead>
+                     <t t-set="total" t-value="0"/>
+                     <t t-set="total2" t-value="0"/>
+                     <t t-foreach="o.matched_move_line_ids" t-as="factura">
+                        <t t-set="total" t-value="total + factura.payment_matched_amount"/>
+                        <t t-set="comprobante" t-value="factura.move_id"/>
+                        <tbody>
+                                <t t-if="comprobante">
+                                    <tr>
+                                        <td><span t-field="comprobante.name"/></td>
+                                        <td class="text-center">
+                                            <span class="text-nowrap" t-field="comprobante.invoice_date_due"/>
+                                        </td>
+                                        <td class="text-right o_price_total">
+                                            <span class="text-nowrap" t-out="comprobante.amount_total" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: comprobante.currency_id}"/>
+                                        </td>
+                                        <td class="text-left">
+                                            <t t-foreach="comprobante.invoice_payments_widget['content']" t-as="linea_pago">
+                                                <p t-out="linea_pago['ref']"/>
+                                            </t>
+                                        </td>
+                                        <td class="text-right o_price_total">
+                                            <t t-foreach="comprobante.invoice_payments_widget['content']" t-as="linea_pago">
+                                                <t t-set="total2" t-value="total2 + linea_pago['amount']"/>
+                                                <p class="text-nowrap" t-out="linea_pago['amount']" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: comprobante.currency_id}"/>
+                                            </t>
+                                        </td>
+                                        <td class="text-right o_price_total">
+                                            <span class="text-nowrap" t-out="comprobante.amount_residual" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: comprobante.currency_id}"/>
+                                        </td>
+                                    </tr>
+                                </t>
+                                <t t-else="">
+                                    <tr>
+                                        <td><span t-field="factura.saldo.name"/></td>
+        
+                                        <td class="text-center">
+                                            <t t-if="factura.saldo.date_maturity">
+                                                <span class="text-nowrap" t-field="factura.saldo.date_maturity"/>
+                                            </t>
+                                            <t t-else="">
+                                                -
+                                            </t>
+                                        </td>
+                                        <td class="text-right o_price_total">
+                                            <span class="text-nowrap" t-out="factura.total_saldo" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: factura.saldo.currency_id}"/>
+                                        </td>
+                                        <td>
+                                            <t t-if="factura.saldo.full_reconcile_id.id">
+                                                <t t-foreach="request.env['account.move.line'].search([('full_reconcile_id', '=', factura.saldo.full_reconcile_id.id),('name', '=', factura.saldo.name)])" t-as="obj">
+                                                    <t t-if="obj.debit != 0">
+                                                        <p t-esc="obj.move_name"/>
+                                                    </t>
+                                                </t>
+                                            </t>
+                                            <t t-else="">
+                                                <t t-foreach="request.env['account.partial.reconcile'].search(['|', ('debit_move_id', '=', factura.saldo.id), ('credit_move_id', '=', factura.saldo.id),('name', '=', factura.saldo.name)])" t-as="reconciliacion_parcial">
+                                                    <t t-foreach="[reconciliacion_parcial.debit_move_id, reconciliacion_parcial.credit_move_id]" t-as="pago">
+                                                        <!-- Excluir el apunte original si es necesario -->
+                                                        <t t-if="pago.id != factura.saldo.id">
+                                                            <p t-esc="pago.move_name"/>
+                                                        </t>
+                                                    </t>
+                                                 </t>
+                                            </t>
+                                        </td>
+                                        <td>
+                                            <t t-if="factura.saldo.full_reconcile_id.id">
+                                                <t t-foreach="request.env['account.move.line'].search([('full_reconcile_id', '=', factura.saldo.full_reconcile_id.id),('name', '!=' , factura.saldo.move_id.name ),('name', '=', factura.saldo.name)])" t-as="obj">
+                                                    <t t-if="obj.debit != 0">
+                                                        <t t-set="total2" t-value="total2 + obj.debit"/>
+                                                        <p t-esc="obj.debit" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: obj.currency_id}"/>
+                                                    </t>
+                                                </t>
+                                            </t>
+                                            <t t-else="">
+                                                <t t-foreach="request.env['account.partial.reconcile'].search(['|', ('debit_move_id', '=', factura.saldo.id), ('credit_move_id', '=', factura.saldo.id),('name', '=', factura.saldo.name)])" t-as="reconciliacion_parcial">
+                                                    <t t-foreach="[reconciliacion_parcial.debit_move_id, reconciliacion_parcial.credit_move_id]" t-as="pago">
+                                                        <!-- Excluir el apunte original si es necesario -->
+                                                        <t t-if="pago.id != factura.saldo.id">
+                                                            <t t-set="total2" t-value="total2 + pago.debit"/>
+                                                            <p t-esc="pago.debit" t-options="{'widget': 'monetary', 'display_currency': pago.currency_id}"/>
+                                                        </t>
+                                                    </t>
+                                                </t>
+                                            </t>
+                                        </td>
+                                        <td>
+                                            <t t-set="debito" t-value="0"/>
+                                            <t t-set="credito" t-value="0"/>
+                                            <t t-if="factura.saldo.full_reconcile_id.id">
+                                                <t t-foreach="request.env['account.move.line'].search([('full_reconcile_id', '=', factura.saldo.full_reconcile_id.id)])" t-as="obj">
+                                                    
+                                                    <t t-set="debito" t-value="debito + obj.debit"/>
+                                                    <t t-set="credito" t-value="credito + obj.credit"/>
+                                                </t>
+                                            </t>   
+                                            <t t-else="">
+                                                <t t-foreach="request.env['account.partial.reconcile'].search(['|', ('debit_move_id', '=', factura.saldo.id), ('credit_move_id', '=', factura.saldo.id)])" t-as="reconciliacion_parcial">
+                                                    <t t-foreach="[reconciliacion_parcial.debit_move_id, reconciliacion_parcial.credit_move_id]" t-as="pago">
+                                                        <t t-set="debito" t-value="debito + pago.debit"/>
+                                                        <t t-set="credito" t-value="credito + pago.credit"/>
+                                                    </t>
+                                                </t>
+                                            </t>
+                                                
+                                                <t t-set="saldo" t-value="credito - debito"/>
+                                                <t t-esc="saldo" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: factura.saldo.currency_id}"/>
+                                        </td>
+                                        <!--<td class="text-left">
+                                            <t t-foreach="comprobante.invoice_payments_widget['content']" t-as="linea_pago">
+                                                <p t-out="linea_pago['ref']"/>
+                                            </t>
+                                        </td>
+                                        <td class="text-right o_price_total">
+                                            <t t-foreach="comprobante.invoice_payments_widget['content']" t-as="linea_pago">
+                                                <t t-set="total2" t-value="total2 + linea_pago['amount']"/>
+                                                <p class="text-nowrap" t-out="linea_pago['amount']" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: comprobante.currency_id}"/>
+                                            </t>
+                                        </td>
+                                        -->
+                                    </tr>
+                                </t>
+                                    <!--<tr>
+                                        <td>Saldo</td>
+                                        <td class="text-center"/>
+                                        <td class="text-center"/>
+                                        <td class="text-right o_price_total"/>
+                                        <td class="text-right o_price_total">
+                                            <span class="text-nowrap" t-field="payment.unmatched_amount"/>
+                                        </td>
+                                    </tr>-->
+                                    <tr/>
+                        </tbody>
+                    </t>
+                    <tfoot>
+                      <tr>
+                            <td colspan="5"><strong><span>Total Imputado</span></strong></td>
+                            <td class="text-right">
+                                <strong><span class="text-nowrap" t-out="total2" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: payment.currency_id}"/></strong>
+                                <!-- <strong><span class="text-nowrap" t-out="o.matched_amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/></strong> -->
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <br/>
+            </t>
+        </template>
+    
+        <template id="report_payment_with_withholdings">
+            <t t-call="web.html_container">
+                <t t-foreach="docs" t-as="o">
+                    <t t-set="lang" t-value="o.partner_id.lang"/>
+                    <t t-call="account-payment-group.report_payment_with_withholdings_document" t-lang="lang"/>
+                </t>
+            </t>
+        </template>
+    
+        <!-- Acción para generar el reporte -->
+        <record id="action_report_payment_with_withholdings" model="ir.actions.report">
+            <field name="name">Recibo de pago</field>
+            <field name="model">account.payment.multiplemethods</field>
+            <field name="binding_model_id" ref="model_account_payment_multiplemethods"/>
+            <field name="report_type">qweb-pdf</field>
+            <field name="print_report_name">'Recibo de pago - %s' % (object.name or '')</field>
+            <field name="report_name">account-payment-group.report_payment_with_withholdings</field>
+            <field name="report_file">account-payment-group.report_payment_with_withholdings</field>
+        </record>
+</odoo>

@@ -1,19 +1,37 @@
-from odoo import models, fields
+from odoo import models, fields, api, Command, _
+from odoo.exceptions import ValidationError, UserError
 
 class CustomAccountPaymentRegister(models.TransientModel):
     _name = 'custom.account.payment.register'
     _inherit = 'account.payment.register'
 
+    amount_received = fields.Monetary(currency_field='currency_id', store=True, readonly=True)
     line_ids = fields.Many2many('account.move.line', 'account_payment_register_move_line_multiple_rel', 'wizard_id', 'line_id',
         string="Journal items", readonly=True, copy=False,)
     multiple_payment_id = fields.Many2one('account.payment.multiplemethods', required=True, ondelete='cascade')
     can_edit_wizard = fields.Boolean(default=True)
-    l10n_latam_check_number = fields.Char('Número de cheque')
-    l10n_latam_check_payment_date = fields.Date('')
-    
-    def action_confirm(self):
-        return
+    l10n_latam_check_number = fields.Char(string='Número de cheque')
+    l10n_latam_check_payment_date = fields.Date(string="Fecha de pago del cheque")
+    l10n_latam_check_id = fields.Many2one(
+        comodel_name='account.payment',
+        string='Check', 
+        copy=False,
+        check_company=True,
+    )
+    l10n_latam_manual_checks = fields.Boolean(
+        related='journal_id.l10n_latam_manual_checks',
+    )
+    payment_method_code = fields.Char(
+        related='payment_method_line_id.code')
 
+    @api.depends('amount_received', 'company_id', 'currency_id', 'payment_date')
+    def _compute_amount(self):
+        for wizard in self:
+            if wizard.amount_received:
+                wizard.amount = wizard.amount_received
+            else:
+                wizard.amount = None
+    
     def _init_payments(self, to_process):
         """
 
@@ -91,6 +109,9 @@ class CustomAccountPaymentRegister(models.TransientModel):
             'payment_method_line_id': self.payment_method_line_id.id,
             'destination_account_id': self.line_ids[0].account_id.id,
             'write_off_line_vals': [],
+            'l10n_latam_check_number':self.l10n_latam_check_number,
+            'l10n_latam_check_payment_date':self.l10n_latam_check_payment_date,
+            'l10n_latam_check_id':self.l10n_latam_check_id,
         }
         return payment_vals
     
@@ -109,8 +130,8 @@ class CustomAccountPaymentRegister(models.TransientModel):
         if not batches:
             raise UserError(_('To record payments with %s, the recipient bank account must be manually validated. You should go on the partner bank account in order to validate it.', self.payment_method_line_id.name))
         first_batch_result = batches[0]
-        edit_mode = True
-        to_process = []
+        edit_mode = True 
+        to_process = [] 
         if edit_mode:
             payment_vals = self._create_payment_vals_from_wizard()
             to_process_values = {

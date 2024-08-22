@@ -22,18 +22,23 @@
     # any module necessary for this one to work correctly
     "external_dependencies": {
         "python": [],
-        "bin": [],
-    },
+        "bin": [], 
+    }, 
     "depends": [
         "account",
+        "account_payment",
         "account_payment_pro",
+        "l10n_ar_withholding_ux",
+        "l10n_ar_account_withholding", 
     ],
 
     # always loaded
     'data': [
-        # 'security/ir.model.access.csv',
+        'security/ir.model.access.csv',
         'views/views.xml',
-        'views/account_payment_register.xml'
+        'views/account_payment_register.xml',
+        'views/report_withholdings_certificate_template.xml',
+        'views/report_payment_with_withholdings.xml',
     ],
     # only loaded in demonstration mode
     'demo': [
