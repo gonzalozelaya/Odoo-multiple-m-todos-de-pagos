@@ -23,7 +23,22 @@ class CustomAccountPaymentRegister(models.TransientModel):
     )
     payment_method_code = fields.Char(
         related='payment_method_line_id.code')
-
+    
+    @api.model
+    def create(self, vals):
+        record = super(CustomAccountPaymentRegister, self).create(vals)
+        if not record.l10n_latam_check_number:
+            if record.journal_id.l10n_check_next_number:
+                record.l10n_latam_check_number = record.journal_id.l10n_check_next_number
+        return record
+        
+    @api.onchange('journal_id','payment_method_line_id')
+    def _compute_l10n_latam_check_number(self):
+        for wizard in self:
+            if not wizard.l10n_latam_check_number:
+                if wizard.journal_id.l10n_check_next_number:
+                    wizard.l10n_latam_check_number = wizard.journal_id.l10n_check_next_number
+    
     @api.depends('amount_received', 'company_id', 'currency_id', 'payment_date')
     def _compute_amount(self):
         for wizard in self:
@@ -31,7 +46,9 @@ class CustomAccountPaymentRegister(models.TransientModel):
                 wizard.amount = wizard.amount_received
             else:
                 wizard.amount = None
-    
+                
+
+        
     def _init_payments(self, to_process):
         """
 
@@ -147,5 +164,6 @@ class CustomAccountPaymentRegister(models.TransientModel):
         
     def action_create_payments(self):
         payments = self._create_payments()
+        self.journal_id.increment_sequence()
         return True
 

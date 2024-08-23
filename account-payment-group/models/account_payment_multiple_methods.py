@@ -2,6 +2,7 @@
 
 from odoo import models, fields, api, Command, _
 from odoo.exceptions import ValidationError, UserError
+from collections import defaultdict
 
 class Account_payment_methods(models.Model):
     _name = 'account.payment.multiplemethods'
@@ -19,7 +20,7 @@ class Account_payment_methods(models.Model):
         compute='_compute_currency_id',
         store=True
     )
-    name = fields.Char(string='',compute='_compute_name_sequence',readonly=True)
+    name = fields.Char(string='',readonly=True)
     sequence_used = fields.Char(String='Sequence',compute='_compute_name_sequence',readonly=True)
     partner_type = fields.Selection([
         ('customer', 'Cliente'),
@@ -160,38 +161,29 @@ class Account_payment_methods(models.Model):
     )
     """
 
-    ###COMPUTE METHODS
-    @api.depends('state')
-    def _compute_name_sequence(self):
-        for record in self:
-            if record.state == 'debts':
-                record.name = 'New'
-                if record.sequence_used:
-                    record.sequence_used == record.sequence_used
-            elif record.state == 'draft':
-                record.name = 'Borrador'
-                if record.sequence_used:
-                    record.sequence_used == record.sequence_used
-            elif record.state == 'posted':
-                record.name = self.env['ir.sequence'].next_by_code('x_reporte_de_pagos') or 'New'
-                if record.sequence_used == False:
-                    record.sequence_used = record.name
-
     @api.depends('state')
     def _compute_matched_move_line_ids(self):
         for record in self:
             if record.state == 'posted':
                 payment_lines_accumulated = self.env['account.move.line']
+                accumulated_amounts = defaultdict(float)
                 for rec in record.to_pay_payment_ids:
-                    payment_lines = rec.line_ids.filtered(lambda x: x.account_type in self._get_valid_payment_account_types())
-                    debit_moves = payment_lines.mapped('matched_debit_ids.debit_move_id')
-                    credit_moves = payment_lines.mapped('matched_credit_ids.credit_move_id')
-                    debit_lines_sorted = debit_moves.filtered(lambda x: x.date_maturity != False).sorted(key=lambda x: (x.date_maturity, x.move_id.name))
-                    credit_lines_sorted = credit_moves.filtered(lambda x: x.date_maturity != False).sorted(key=lambda x: (x.date_maturity, x.move_id.name))
-                    debit_lines_without_date_maturity = debit_moves - debit_lines_sorted
-                    credit_lines_without_date_maturity = credit_moves - credit_lines_sorted
-                    payment_lines_accumulated |= payment_lines
-                record.matched_move_line_ids = ((debit_lines_sorted + debit_lines_without_date_maturity) | (credit_lines_sorted + credit_lines_without_date_maturity)) - payment_lines_accumulated
+                    payment_lines = rec.matched_move_line_ids
+                
+                    # Iterar sobre las líneas de pago y acumular los montos por ID
+                    for matched in payment_lines:
+                        line_id = matched.id
+                        accumulated_amounts[line_id] += matched.payment_matched_amount
+                for line_id, total_amount in accumulated_amounts.items():
+                    # Busca la línea original en la base de datos por su ID
+                    line = self.env['account.move.line'].browse(line_id)
+                    
+                    # Actualiza el campo que contiene el monto acumulado si es necesario
+                    line.payment_matched_amount = total_amount
+                    
+                    # Agrega la línea al recordset acumulado
+                    payment_lines_accumulated |= line
+                record.matched_move_line_ids = payment_lines_accumulated
             else:
                 record.matched_move_line_ids = False
     @api.depends('to_pay_payment_ids')
@@ -233,7 +225,7 @@ class Account_payment_methods(models.Model):
         for rec in self:
             rec.payment_total = rec.amount_company_currency_signed_pro + sum(rec.withholding_line_ids.mapped('amount'))
         
-    @api.depends('to_pay_payment_ids')
+    @api.depends('to_pay_payment_ids','withholding_line_ids')
     def _compute_amount_company_currency_signed_pro(self):
         """ new field similar to amount_company_currency_signed but:
         1. is positive for payments to suppliers
@@ -389,30 +381,37 @@ class Account_payment_methods(models.Model):
         # Conciliar secuencialmente
         for payment in payments:
             remaining_amount = payment.amount
-
+            if first_payment and self.withholding_line_ids:
+                payment.write({
+                        'l10n_ar_withholding_line_ids': [(5, 0, 0)]
+                    })
+                payment.write({
+                    'l10n_ar_withholding_line_ids': [(4, tax.id) for tax in self.withholding_line_ids]
+                })
+                first_payment = False
             for invoice_line in invoices:
                 invoice_balance = invoice_line.amount_residual
-
-                # Siempre agregar la línea de factura al campo to_pay_move_line_ids del pago
-                payment.write({
-                        'to_pay_move_line_ids': [(4, invoice_line.id)]
-                    })
-
-                # Determinar el monto a conciliar
-                amount_to_reconcile = min(remaining_amount, invoice_balance)
-
-                remaining_amount -= amount_to_reconcile
+                invoice_remaining = invoice_balance
+                if invoice_balance < 0:
+                    # Siempre agregar la línea de factura al campo to_pay_move_line_ids del pago
+                    payment.write({
+                            'to_pay_move_line_ids': [(4, invoice_line.id)]
+                        })
+                    # Determinar el monto a conciliar
+                    amount_to_reconcile = min(remaining_amount, invoice_balance)
+    
+                    remaining_amount -= amount_to_reconcile
 
                 # Si la factura aún tiene un saldo después de este pago, se seguirá utilizando en el próximo pago
                 if remaining_amount <= 0:
                     break
-            if first_payment and self.withholding_line_ids:
-                payment.write({
-                    'l10n_ar_withholding_line_ids': [(4, tax.id) for tax in self.withholding_line_ids]
-                })
+            
             payment.action_post()
         # Publicar los pagos que han sido conciliados
         #payments.action_post()
+        if not self.name:
+            self.name = self.env['ir.sequence'].next_by_code('x_reporte_de_pagos') or 'New'
+            self.sequence_used = self.name
         self.state = 'posted'
         return
 
@@ -636,3 +635,5 @@ class AccountPayment(models.Model):
     def delete_payment(self):
         self.ensure_one()
         self.unlink()
+
+

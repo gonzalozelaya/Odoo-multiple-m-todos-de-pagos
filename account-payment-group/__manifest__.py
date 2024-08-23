@@ -39,6 +39,7 @@
         'views/account_payment_register.xml',
         'views/report_withholdings_certificate_template.xml',
         'views/report_payment_with_withholdings.xml',
+        'views/account_journal_views.xml',
     ],
     # only loaded in demonstration mode
     'demo': [

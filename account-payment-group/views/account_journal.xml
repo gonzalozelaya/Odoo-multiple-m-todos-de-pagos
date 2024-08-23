@@ -1,0 +1,14 @@
+<odoo>
+    <record id="view_account_journal_form_inherited_add_custom_field" model="ir.ui.view">
+        <field name="name">account.journal.form.check_sequence_field</field>
+        <field name="model">account.journal</field>
+        <field name="inherit_id" ref="account_check_printing.view_account_journal_form_inherited"/>
+        <field name="arch" type="xml">
+            <!-- Utilizar XPath para posicionar el nuevo campo después de 'l10n_latam_manual_checks' -->
+            <xpath expr="//field[@name='l10n_latam_manual_checks']" position="after">
+                <!-- Agregar tu nuevo campo aquí -->
+                <field name="l10n_check_next_number"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

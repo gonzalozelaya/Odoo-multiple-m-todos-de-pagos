@@ -29,10 +29,12 @@
                     <field name="state" widget="statusbar" statusbar_visible="debts,draft,posted,cancelled"/>
                 </header>
                 <sheet>
+                    <div class="oe_title">
+                            <h1 invisible="state != 'debts'"><span>Nuevo</span></h1>
+                            <h1 invisible="state != 'draft'"><span>Borrador</span></h1>
+                            <h1 invisible="state in ['draft','debts']"><field name="name" readonly="1"/></h1>
+                        </div>
                     <group>
-                        <group>
-                            <field name="name"/>
-                        </group>
                         <group>
                             <field name="partner_id"/>
                             <field name="partner_type"/>
@@ -46,7 +48,7 @@
                             </div>
                         </group>
                         <group>
-                            <field name="payment_difference"/>
+                            <field name="payment_difference" invisible="state == 'posted' or state == 'canceled' or state == 'debts'"/>
                             <field name="payment_total"/>
                         </group>
                         <notebook>
@@ -134,8 +136,8 @@
                             </page>
                         </notebook>
                         <group>
-                            <field name="selected_debt"/>
-                            <field name="to_pay_amount"/>
+                            <field name="selected_debt" invisible="state == 'posted' or state == 'canceled' or state == 'debts'"/>
+                            <field name="to_pay_amount" invisible="state == 'posted' or state == 'canceled' or state == 'debts'"/>
                         </group>
                     </group>
                 </sheet>
