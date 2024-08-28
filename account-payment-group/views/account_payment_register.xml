@@ -53,7 +53,7 @@
                     <field name="payment_date" string="Fecha de pago"/>
                 </group>
                 <group name="group3">
-                    <field name="payment_difference" string="Diferencia de pago"/>
+                    <field name="payment_difference" string="Diferencia de pago" invisible="1"/>
                 </group>
                 <footer>
                     <button string="Añadir pago" name="action_create_payments"  type="object" class="oe_highlight" data-hotkey="q"/>

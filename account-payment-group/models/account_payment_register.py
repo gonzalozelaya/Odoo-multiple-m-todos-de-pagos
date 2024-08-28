@@ -39,13 +39,16 @@ class CustomAccountPaymentRegister(models.TransientModel):
                 if wizard.journal_id.l10n_check_next_number:
                     wizard.l10n_latam_check_number = wizard.journal_id.l10n_check_next_number
     
-    @api.depends('amount_received', 'company_id', 'currency_id', 'payment_date')
+    @api.depends('amount_received', 'company_id', 'currency_id', 'payment_date','l10n_latam_check_id')
     def _compute_amount(self):
         for wizard in self:
-            if wizard.amount_received:
-                wizard.amount = wizard.amount_received
+            if wizard.l10n_latam_check_id:
+                wizard.amount = wizard.l10n_latam_check_id.amount
             else:
-                wizard.amount = None
+                if wizard.amount_received:
+                    wizard.amount = wizard.amount_received
+                else:
+                    wizard.amount = None
                 
 
         
@@ -128,7 +131,7 @@ class CustomAccountPaymentRegister(models.TransientModel):
             'write_off_line_vals': [],
             'l10n_latam_check_number':self.l10n_latam_check_number,
             'l10n_latam_check_payment_date':self.l10n_latam_check_payment_date,
-            'l10n_latam_check_id':self.l10n_latam_check_id,
+            'l10n_latam_check_id':self.l10n_latam_check_id.id,
         }
         return payment_vals
     
