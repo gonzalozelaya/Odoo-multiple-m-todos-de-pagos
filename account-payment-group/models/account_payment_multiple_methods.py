@@ -58,7 +58,7 @@ class Account_payment_methods(models.Model):
         domain="[('partner_id', '=', partner_id), ('state', '!=', 'reconciled'), ('partner_type', 'in', ['customer', 'supplier'])]"
     )
     withholding_line_ids = fields.One2many(
-        'l10n_ar.payment.withholding', 'x_multiple_payment_id', string='Withholdings Lines',
+        'l10n_ar.payment.withholding', 'multiple_payment_id', string='Withholdings Lines',
         # compute='_compute_l10n_ar_withholding_line_ids', readonly=False, store=True
     )
     matched_move_line_ids = fields.Many2many(
@@ -329,7 +329,7 @@ class Account_payment_methods(models.Model):
     def confirm_debts(self):
         for record in self:
             record.state = 'draft'
-            record._compute_withholdings()
+            #record._compute_withholdings()
     def compute_withholdingss(self):
         for rec in self:
             rec._compute_withholdings()
@@ -421,6 +421,7 @@ class Account_payment_methods(models.Model):
         # chequeamos lineas a pagar antes de computar impuestos para evitar trabajar sobre base erronea
         self._check_to_pay_lines_account()
         for rec in self:
+
             if rec.partner_type != 'supplier':
                 continue
             # limpiamos el type por si se paga desde factura ya que el en ese
@@ -635,5 +636,3 @@ class AccountPayment(models.Model):
     def delete_payment(self):
         self.ensure_one()
         self.unlink()
-
-

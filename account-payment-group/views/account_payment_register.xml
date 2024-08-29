@@ -5,30 +5,20 @@
         <field name="arch" type="xml">
             <form string="Registrar Pago">
                 <group>   
-                    <field name="line_ids" invisible="1"/>
                     <field name="amount_received" invisible="1"/>
                     <field name="can_edit_wizard" invisible="1" force_save="1"/>
                     <field name="can_group_payments" invisible="1" force_save="1"/>
-                    <field name="early_payment_discount_mode" invisible="1" force_save="1"/>
                     <field name="payment_type" invisible="1" force_save="1"/>
                     <field name="partner_type" invisible="1" force_save="1"/>
                     <field name="source_amount" invisible="1" force_save="1"/>
-                    <field name="source_amount_currency" invisible="1" force_save="1"/>
-                    <field name="source_currency_id" invisible="1" force_save="1"/>
                     <field name="company_id" invisible="1" force_save="1"/>
                     <field name="partner_id" invisible="1" force_save="1"/>
-                    <field name="country_code" invisible="1" force_save="1"/>
-                    <field name="currency_id" invisible="1" />
-
-                    <field name="show_partner_bank_account" invisible="1"/>
-                    <field name="require_partner_bank_account" invisible="1"/>
+                    <field name="currency_id" invisible="0" />
+                    
                     <field name="available_journal_ids" invisible="1"/>
                     <field name="available_payment_method_line_ids" invisible="1"/>
                     <field name="available_partner_bank_ids" invisible="1"/>
                     <field name="company_currency_id" invisible="1"/>
-                    <field name="hide_writeoff_section" invisible="1"/>
-                    <field name="writeoff_is_exchange_account" invisible="1"/>
-                    <field name="untrusted_bank_ids" invisible="1"/>
                 </group>
                 <group name="group1">
                     <field name="journal_id" string="Diario" options="{'no_open': True, 'no_create': True}" required="1"/>
