@@ -6,6 +6,8 @@ from collections import defaultdict
 
 class Account_payment_methods(models.Model):
     _name = 'account.payment.multiplemethods'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+    
     date = fields.Date(string='Date')
     
     company_id = fields.Many2one(
@@ -21,7 +23,7 @@ class Account_payment_methods(models.Model):
         store=True
     )
     name = fields.Char(string='',readonly=True)
-    sequence_used = fields.Char(String='Sequence',compute='_compute_name_sequence',readonly=True)
+    sequence_used = fields.Char(String='Sequence',readonly=True)
     partner_type = fields.Selection([
         ('customer', 'Cliente'),
         ('supplier', 'Proveedor'),
@@ -54,11 +56,12 @@ class Account_payment_methods(models.Model):
         'account_payment_payment_multiple_rel',
         'multiple_payment_id',
         'to_pay_payment_id',
-        string='Pagos no conciliados', 
+        string='Pagos no conciliados',
+        tracking=True,
         domain="[('partner_id', '=', partner_id), ('state', '!=', 'reconciled'), ('partner_type', 'in', ['customer', 'supplier'])]"
     )
     withholding_line_ids = fields.One2many(
-        'l10n_ar.payment.withholding', 'x_multiple_payment_id', string='Withholdings Lines',
+        'l10n_ar.payment.withholding', 'multiple_payment_id', string='Withholdings Lines',
         # compute='_compute_l10n_ar_withholding_line_ids', readonly=False, store=True
     )
     matched_move_line_ids = fields.Many2many(
@@ -72,7 +75,7 @@ class Account_payment_methods(models.Model):
         ('draft', 'Borrador'),
         ('posted', 'Publicado'), 
         ('cancelled', 'Cancelado'),
-    ], string='Status', default='debts')
+    ], string='Status', default='debts',tracking=True)
 
     selected_debt = fields.Monetary(
         # string='To Pay lines Amount',
@@ -109,6 +112,11 @@ class Account_payment_methods(models.Model):
         help="Difference between selected debt (or to pay amount) and "
         "payments amount"
     )
+    payment_type = fields.Selection([
+        ('outbound', 'Send Money'),
+        ('inbound', 'Receive Money'),
+    ], string='Payment Type', store=True, copy=False,default='outbound')
+    
     last_journal_used = fields.Many2one(
         'account.journal',
         string='Último Diario Utilizado',
@@ -145,6 +153,10 @@ class Account_payment_methods(models.Model):
         'Adjustment / Advance (untaxed)',
         help='Used for withholdings calculation',
         currency_field='company_currency_id',
+    )
+    is_advanced_payment = fields.Boolean(
+        'Pagos avanzados',
+        default = False,
     )
     """"
     matched_amount_untaxed = fields.Monetary(
@@ -325,11 +337,30 @@ class Account_payment_methods(models.Model):
 
     def remove_all(self):
         self.to_pay_move_line_ids = False
-        
+    def avanced_payments(self):
+         for record in self:
+            record.state = 'draft'
+            record.is_advanced_payment = True
+            message = "Ninguna deuda seleccionada, se realizaran pagos adelantados"
+            # Envío del mensaje al chatter
+            record.message_post(
+                body=message,
+                subject="Deuda Seleccionada",
+                message_type='comment',
+                subtype_xmlid='mail.mt_comment'
+            )
     def confirm_debts(self):
         for record in self:
             record.state = 'draft'
             record._compute_withholdings()
+            message = "Deuda seleccionada ${:.2f} .".format(self.selected_debt)
+            # Envío del mensaje al chatter
+            record.message_post(
+                body=message,
+                subject="Deuda Seleccionada",
+                message_type='comment',
+                subtype_xmlid='mail.mt_comment'
+            )
     def compute_withholdingss(self):
         for rec in self:
             rec._compute_withholdings()
@@ -341,10 +372,15 @@ class Account_payment_methods(models.Model):
             record.state='draft'
         return
     def cancel_payments(self):
+        for record in self:
+            for payment in record.to_pay_payment_ids:
+                payment.action_cancel()
+            record.state='cancelled'
         return
     
     def add_payment(self):
-        self.ensure_one()
+        if not self.is_advanced_payment:
+            self.ensure_one()
         # Crear el asistente y llenar line_ids con to_pay_move_line_ids
         payment_register = self.env['custom.account.payment.register'].create({
             'line_ids': [(6, 0, self.to_pay_move_line_ids.ids)],
@@ -352,6 +388,12 @@ class Account_payment_methods(models.Model):
             'amount_received' : self.payment_difference,
             'journal_id':self.last_journal_used.id,
             'payment_method_line_id':self.last_payment_method_line_id.id,
+            'is_advanced_payment':self.is_advanced_payment,
+            'company_id':self.company_id.id,
+            'partner_type':self.partner_type,
+            'partner_id':self.partner_id.id,
+            'currency_id':self.company_currency_id.id,
+            'payment_type':self.payment_type
         })
     
         # Devolver la acción para abrir el asistente en una ventana modal
@@ -365,50 +407,111 @@ class Account_payment_methods(models.Model):
             'res_id': payment_register.id,
             'context': {
                 'default_multiple_payment_id': self.id,
-                'default_amount_received' : self.payment_difference,
+                'default_amount_received': self.payment_difference,
                 **self.env.context,
             },
         }
+
+   
+    #Pendiente
+    def action_send_email(self):
+        # Alternativa sin plantilla:
+        Mail = self.env['mail.mail']
+        report_1 = self.env.ref('account-payment-group.action_report_payment_with_withholdings', raise_if_not_found=False)  # Reemplaza con el ID de tu primer reporte
+        report_2 = self.env.ref('account-payment-group.action_report_withholding_certificate', raise_if_not_found=False)
+        for record in self:
+            # Crear el correo
+            # Generar los reportes en formato PDF
+            try:
+                record_ids = [record.id]
+                # Generar los PDFs de los reportes
+                pdf_1 = report_1._render_qweb_pdf(record_ids)  # Genera el PDF del reporte 1
+                pdf_2 = report_2._render_qweb_pdf(record_ids)  # Genera el PDF del reporte 2
+            except Exception as e:
+                raise UserError(f"Error al generar los reportes: {str(e)}")
+            raise UserError(str(pdf_1))
+            # Crear adjuntos para los reportes
+            attachment_1 = self.env['ir.attachment'].create({
+                'name': 'Reporte_1.pdf',
+                'type': 'binary',
+                'datas': pdf_1.encode('base64'),
+                'res_model': record._name,
+                'res_id': record.id,
+                'mimetype': 'application/pdf'
+            })
+            attachment_2 = self.env['ir.attachment'].create({
+                'name': 'Reporte_2.pdf',
+                'type': 'binary',
+                'datas': pdf_2.encode('base64'),
+                'res_model': record._name,
+                'res_id': record.id,
+                'attachment_ids': [(6, 0, [attachment_1.id, attachment_2.id])],
+                'mimetype': 'application/pdf'
+            })
+
+            
+            mail = Mail.create({
+                'subject': 'Asunto del correo',
+                'body_html': '<p>Este es el cuerpo del correo enviado desde Odoo.</p>',
+                'email_to': record.partner_id.email,  # Reemplaza con la dirección de destino
+                'model': record._name,  # Especifica el modelo para vincular al chatter
+                'res_id': record.id,  # ID del registro para vincular al chatter
+            })
+            # Enviar el correo
+            mail.send()
+    
+            # Opcional: Registrar una entrada en el chatter
+            record.message_post(
+                body=mail.body_html,  # Muestra el cuerpo del correo
+                subject=mail.subject,  # Asunto del correo
+                message_type='comment',  # Tipo de mensaje
+                subtype_xmlid='mail.mt_comment',  # Subtipo de mensaje para comentarios
+            )
+    
     def action_reconcile_payments(self):
         self.ensure_one()
-
+        
         invoices = self.to_pay_move_line_ids.filtered(lambda line: not line.reconciled).sorted(key=lambda line: line.date)
         payments = self.to_pay_payment_ids.filtered(lambda payment: payment.state == 'draft')
 
-        if not invoices or not payments:
-            raise UserError("No hay facturas o pagos pendientes para conciliar.")
-        first_payment = True  # Variable para marcar el primer pago
-        # Conciliar secuencialmente
-        for payment in payments:
-            remaining_amount = payment.amount
-            if first_payment and self.withholding_line_ids:
-                payment.write({
-                        'l10n_ar_withholding_line_ids': [(5, 0, 0)]
-                    })
-                payment.write({
-                    'l10n_ar_withholding_line_ids': [(4, tax.id) for tax in self.withholding_line_ids]
-                })
-                first_payment = False
-            for invoice_line in invoices:
-                invoice_balance = invoice_line.amount_residual
-                invoice_remaining = invoice_balance
-                if invoice_balance < 0:
-                    # Siempre agregar la línea de factura al campo to_pay_move_line_ids del pago
+        if self.is_advanced_payment:
+            for payment in payments:
+                payment.action_post()
+        else:
+            if not invoices or not payments:
+                raise UserError("No hay facturas o pagos pendientes para conciliar.")
+            first_payment = True  # Variable para marcar el primer pago
+            # Conciliar secuencialmente
+            for payment in payments:
+                
+                remaining_amount = payment.amount
+                if first_payment and self.withholding_line_ids:
                     payment.write({
-                            'to_pay_move_line_ids': [(4, invoice_line.id)]
+                            'l10n_ar_withholding_line_ids': [(5, 0, 0)]
                         })
-                    # Determinar el monto a conciliar
-                    amount_to_reconcile = min(remaining_amount, invoice_balance)
+                    payment.write({
+                        'l10n_ar_withholding_line_ids': [(4, tax.id) for tax in self.withholding_line_ids]
+                    })
+                    first_payment = False
+                for invoice_line in invoices:
+                    invoice_balance = invoice_line.amount_residual
+                    invoice_remaining = invoice_balance
+                    if invoice_balance < 0:
+                        # Siempre agregar la línea de factura al campo to_pay_move_line_ids del pago
+                        payment.write({
+                                'to_pay_move_line_ids': [(4, invoice_line.id)]
+                            })
+                        # Determinar el monto a conciliar
+                        amount_to_reconcile = min(remaining_amount, invoice_balance)
+        
+                        remaining_amount -= amount_to_reconcile
     
-                    remaining_amount -= amount_to_reconcile
-
-                # Si la factura aún tiene un saldo después de este pago, se seguirá utilizando en el próximo pago
-                if remaining_amount <= 0:
-                    break
-            
-            payment.action_post()
-        # Publicar los pagos que han sido conciliados
-        #payments.action_post()
+                    # Si la factura aún tiene un saldo después de este pago, se seguirá utilizando en el próximo pago
+                    if remaining_amount <= 0:
+                        break
+                payment.action_post()
+            # Publicar los pagos que han sido conciliados
+            #payments.action_post()
         if not self.name:
             self.name = self.env['ir.sequence'].next_by_code('x_reporte_de_pagos') or 'New'
             self.sequence_used = self.name
@@ -421,6 +524,7 @@ class Account_payment_methods(models.Model):
         # chequeamos lineas a pagar antes de computar impuestos para evitar trabajar sobre base erronea
         self._check_to_pay_lines_account()
         for rec in self:
+
             if rec.partner_type != 'supplier':
                 continue
             # limpiamos el type por si se paga desde factura ya que el en ese
@@ -433,6 +537,7 @@ class Account_payment_methods(models.Model):
                     ('company_id', '=', rec.company_id.id),
                 ])
             rec._upadte_withholdings(taxes)
+            
 
     def compute_withholdings(self):
         checks_payments = self.filtered(lambda x: x.payment_method_code in ['in_third_party_checks', 'out_third_party_checks'])
@@ -479,6 +584,7 @@ class Account_payment_methods(models.Model):
     def _upadte_withholdings(self, taxes):
         self.ensure_one()
         commands = []
+        withholding_details = []
         for tax in taxes:
             if (
                     tax.withholding_user_error_message and
@@ -528,10 +634,21 @@ class Account_payment_methods(models.Model):
             else:
                 # TODO implementar devoluciones de retenciones
                 # TODO en vez de pasarlo asi usar un command create
-                vals['payment_id'] = self.id
+                vals['multiple_payment_id'] = self.id
                 commands.append(Command.create(vals))
+            withholding_details.append(f"Retención: {tax.name}, Monto: {computed_withholding_amount:.2f}--")
         self.withholding_line_ids = commands
-
+        # Enviar mensaje al chatter con los detalles de las retenciones creadas o actualizadas
+        # Enviar mensaje al chatter con los detalles de las retenciones creadas o actualizadas
+        if withholding_details:
+            message = '\n'.join(withholding_details)
+            self.message_post(
+                body=message,
+                subject="Actualización de Retenciones",
+                message_type='comment',
+                subtype_xmlid='mail.mt_note',  # Asegura que el mensaje se trate como HTML
+                
+            )
     def _check_to_pay_lines_account(self):
         """ TODO ver si esto tmb lo llevamos a la UI y lo mostramos como un warning.
         tmb podemos dar mas info al usuario en el error """
@@ -632,8 +749,26 @@ class l10nArPaymentRegisterWithholding(models.Model):
 class AccountPayment(models.Model):
     _inherit = 'account.payment'
 
+    multiple_payment_id = fields.Many2one(
+        comodel_name='account.payment.multiplemethods',  # Apunta al modelo 'account.payment.multiplemethods'
+        string='Multiple Payment',
+        ondelete='restrict',  # Puedes cambiar esto según tus necesidades: 'cascade', 'restrict', etc.
+        help='Selecciona el registro de pago múltiple relacionado.'
+    )
+    
     def delete_payment(self):
         self.ensure_one()
         self.unlink()
+        
+class AccountMove(models.Model):
+    _inherit = 'account.move'
 
+    currency_id = fields.Many2one(
+        'res.currency',
+        string='Currency',
+        tracking=True,
+        required=False,
+        compute='_compute_currency_id', inverse='_inverse_currency_id', store=True, readonly=False, precompute=True,)
+
+   
 

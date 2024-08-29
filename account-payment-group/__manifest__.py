@@ -9,8 +9,8 @@
         Este modulo permite usar multiples metodos de pago en una sola orden
     """,
 
-    'author': "AAAAAAAAA",
-    'website': "http://www.yourcompany.com",
+    'author': "OutsourceArg",
+    'website': "http://www.outsourcearg.com",
     "license": "AGPL-3",
     'installable': True,
     # Categories can be used to filter modules in modules listing
@@ -39,7 +39,7 @@
         'views/account_payment_register.xml',
         'views/report_withholdings_certificate_template.xml',
         'views/report_payment_with_withholdings.xml',
-        'views/account_journal_views.xml',
+        'views/account_journal.xml',
     ],
     # only loaded in demonstration mode
     'demo': [

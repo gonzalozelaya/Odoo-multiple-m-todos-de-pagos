@@ -6,7 +6,7 @@
         <field name="model">account.payment.multiplemethods</field>
         <field name="arch" type="xml">
             <tree edit="false" sample="1" decoration-info="state == 'draft'" decoration-muted="state == 'cancel'"> 
-                <field name="name"/> 
+                <field name="name"/>
                 <field name="partner_id"/>
                 <field name="payment_total"/>
                 <field name="state"  widget="badge" decoration-info="state == 'draft'" decoration-success="state == 'posted'"/>
@@ -21,11 +21,13 @@
         <field name="arch" type="xml">
             <form>
                 <header>
-                    <button name="confirm_debts" type="object" string="Pagar deudas" class="btn-primary" invisible="state != 'debts'"/>
+                    <button name="confirm_debts" type="object" string="Pagar deudas" class="btn-primary" invisible="state != 'debts' or not to_pay_move_line_ids"/>
+                    <button name="avanced_payments" type="object" string="Pagos adelantados" class="btn-primary" invisible="state != 'debts' or to_pay_move_line_ids"/>
                     <button name="action_reconcile_payments" string="Publicar Pagos" type="object" class="btn-primary" invisible="state != 'draft'"/>
                     <button name="compute_withholdingss" string="Recalcular retenciones" type="object" invisible="state != 'draft'"/>
-                    <button name="reset_to_draft" string="Restablecer a borrador" type="object" invisible="state != 'posted'"/>
+                    <button name="reset_to_draft" string="Restablecer a borrador" type="object" invisible="state != 'posted' and state != 'cancelled'"/>
                     <button name="cancel_payments" string="Cancelar" type="object" invisible="state != 'draft'"/>
+                    <button name="action_send_email" string="Enviar mail" type="object" invisible="1"/>
                     <field name="state" widget="statusbar" statusbar_visible="debts,draft,posted,cancelled"/>
                 </header>
                 <sheet>
@@ -36,6 +38,7 @@
                         </div>
                     <group>
                         <group>
+                            <field name="is_advanced_payment" invisible="1"/>
                             <field name="partner_id"/>
                             <field name="partner_type"/>
                         </group>
@@ -52,7 +55,7 @@
                             <field name="payment_total"/>
                         </group>
                         <notebook>
-                            <page string="Deudas" invisible="state not in['debts','draft']">
+                            <page string="Deudas" invisible="state not in['debts','draft'] or is_advanced_payment">
                                 <button name="add_all" string="Añadir todo" type="object" invisible="state not in ['debts']"/>
                                 <button name="remove_all" string="Remover todo" type="object" invisible="state not in ['debts']"/>
                                 <field name="to_pay_move_line_ids" readonly="state != 'debts'" domain="[('account_id.reconcile', '=', True), 
@@ -141,13 +144,44 @@
                         </group>
                     </group>
                 </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids" groups="base.group_user"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
             </form>
         </field>
     </record> 
+
+    <record id="view_move_line_tree" model="ir.ui.view">
+        <field name="name">account.move.line.tree</field>
+        <field name="model">account.move.line</field>
+        <field eval="99" name="priority"/>
+        <field name="arch" type="xml">
+            <tree string="Journal Items" edit="1">
+                <field name="date" readonly="True"/>
+                <field name="date_maturity" optional="hide" readonly="True"/>
+                <field name="move_id" required="0" readonly="True"/>
+                <field name="journal_id" options='{"no_open":True}' readonly="True" optional="hide"/>
+                <field name="name" readonly="True" optional="hide"/>
+                <field name="ref" optional="show" readonly="True"/>
+                <field name="statement_id" column_invisible="True" readonly="True"/>
+                <field name="account_id" options='{"no_open":True}' domain="[('company_id', '=', company_id)]" readonly="True" optional="hide"/>
+                <field name="balance" optional="hide" string="Amount" readonly="True"/>
+                <field name="amount_residual" readonly="True"/>
+                <field name="amount_currency" groups="base.group_multi_currency" readonly="True"/>
+                <field name="amount_residual_currency" optional="hide" groups="base.group_multi_currency" readonly="True"/>
+                <field name="currency_id" column_invisible="True" readonly="True"/>
+                <field name="company_currency_id" column_invisible="True" readonly="True"/>
+                <field name="company_id" column_invisible="True" readonly="True"/>
+                <!--button type="object" icon="fa-external-link" help="Open Related Document" name="action_open_related_document"/-->
+            </tree>
+        </field>
+    </record>
     
      <!-- Definición de la acción de ventana -->
     <record id="action_payment_multiple_methods" model="ir.actions.act_window">
-        <field name="name">Payment Methods</field>
+        <field name="name">Pagos en grupo</field>
         <field name="res_model">account.payment.multiplemethods</field>
         <field name="view_mode">tree,form</field>
         <field name="view_id" ref="view_account_payment_multiplemethods_tree"/>
@@ -155,7 +189,7 @@
     
     <!-- Definición del menú -->
     <menuitem id="payment_multiple_methods" 
-              name="Payment Methods" 
+              name="Pagos en grupo" 
               parent="account.menu_action_account_payments_payable" 
               action="action_payment_multiple_methods"/>
 </odoo>
