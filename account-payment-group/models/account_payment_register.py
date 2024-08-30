@@ -62,7 +62,10 @@ class CustomAccountPaymentRegister(models.TransientModel):
                 wizard.amount = wizard.l10n_latam_check_id.amount
             else:
                 if wizard.amount_received:
-                    wizard.amount = wizard.amount_received
+                    if wizard.amount_received > 0:
+                        wizard.amount = wizard.amount_received
+                    else:
+                        wizard.amount_received = 0
                 else:
                     wizard.amount = None
                     

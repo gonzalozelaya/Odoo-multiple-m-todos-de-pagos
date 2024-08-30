@@ -3,12 +3,16 @@
 from odoo import models, fields, api, Command, _
 from odoo.exceptions import ValidationError, UserError
 from collections import defaultdict
+import ast
 
 class Account_payment_methods(models.Model):
     _name = 'account.payment.multiplemethods'
     _inherit = ['mail.thread', 'mail.activity.mixin']
     
-    date = fields.Date(string='Date')
+    date = fields.Date(
+        string='Date', 
+        default=fields.Date.context_today,  # Asigna el día actual por defecto
+    )
     
     company_id = fields.Many2one(
         comodel_name='res.company',
@@ -27,7 +31,7 @@ class Account_payment_methods(models.Model):
     partner_type = fields.Selection([
         ('customer', 'Cliente'),
         ('supplier', 'Proveedor'),
-    ], default='supplier', required=True)
+    ], default='supplier', required=True,readonly=True)
     
     payment_reference = fields.Char(string="Referencia de pago", copy=False, tracking=True,
         help="Reference of the document used to issue this payment. Eg. check number, file name, etc.")
@@ -45,7 +49,7 @@ class Account_payment_methods(models.Model):
             'multiple_payment_id',
             'to_pay_line_id',
             string="Lineas a pagar",
-             store=True,
+            store=True,
             help='This lines are the ones the user has selected to be paid.',
             copy=False,
             readonly=False,
@@ -57,7 +61,6 @@ class Account_payment_methods(models.Model):
         'multiple_payment_id',
         'to_pay_payment_id',
         string='Pagos no conciliados',
-        tracking=True,
         domain="[('partner_id', '=', partner_id), ('state', '!=', 'reconciled'), ('partner_type', 'in', ['customer', 'supplier'])]"
     )
     withholding_line_ids = fields.One2many(
@@ -172,7 +175,13 @@ class Account_payment_methods(models.Model):
         currency_field='currency_id',
     )
     """
+    display_name = fields.Char(string='Número', compute='_compute_display_name')
 
+    @api.depends('name')
+    def _compute_display_name(self):
+        for record in self:
+            record.display_name = record.name if record.name else '/'
+            
     @api.depends('state')
     def _compute_matched_move_line_ids(self):
         for record in self:
@@ -331,6 +340,37 @@ class Account_payment_methods(models.Model):
             ('account_id.account_type', '=', 'asset_receivable' if self.partner_type == 'customer' else 'liability_payable'),
         ]
 
+    def action_open_manual_reconciliation_widget(self):
+        ''' Open the manual reconciliation widget for the current payment.
+        :return: A dictionary representing an action.
+        '''
+        self.ensure_one()
+        if self.to_pay_payment_ids:
+            action_values = self.env['ir.actions.act_window']._for_xml_id('account_accountant.action_move_line_posted_unreconciled')
+            if self.partner_id:
+                context = ast.literal_eval(action_values['context'])
+                context.update({'search_default_partner_id': self.partner_id.id})
+                if self.partner_type == 'customer':
+                    context.update({'search_default_trade_receivable': 1})
+                elif self.partner_type == 'supplier':
+                    context.update({'search_default_trade_payable': 1})
+                action_values['context'] = context
+            return action_values
+    
+    def action_view_reconciliations(self):
+        self.ensure_one()
+        # Obtener las líneas de movimiento conciliadas relacionadas con los pagos
+        reconciled_lines = self.matched_move_line_ids
+          # Obtener las líneas de débito de los pagos en to_pay_payment_ids
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Conciliaciones y Líneas de Pago',
+            'res_model': 'account.move.line',
+            'view_mode': 'tree,form',
+            'domain': [('id', 'in', reconciled_lines.ids)],
+            'target': 'current',
+            'context': self.env.context,
+        }
     def add_all(self):
         for rec in self:
             rec.to_pay_move_line_ids = [Command.clear(), Command.set(self.env['account.move.line'].search(rec._get_to_pay_move_lines_domain()).ids)]
@@ -636,19 +676,17 @@ class Account_payment_methods(models.Model):
                 # TODO en vez de pasarlo asi usar un command create
                 vals['multiple_payment_id'] = self.id
                 commands.append(Command.create(vals))
-            withholding_details.append(f"Retención: {tax.name}, Monto: {computed_withholding_amount:.2f}--")
+            withholding_details.append(f"{tax.name}, Monto: {computed_withholding_amount:.2f}")
         self.withholding_line_ids = commands
         # Enviar mensaje al chatter con los detalles de las retenciones creadas o actualizadas
-        # Enviar mensaje al chatter con los detalles de las retenciones creadas o actualizadas
         if withholding_details:
-            message = '\n'.join(withholding_details)
-            self.message_post(
-                body=message,
-                subject="Actualización de Retenciones",
-                message_type='comment',
-                subtype_xmlid='mail.mt_note',  # Asegura que el mensaje se trate como HTML
-                
-            )
+            for witholding in withholding_details:
+                self.message_post(
+                    body=witholding,
+                    subject="Cálculo de Retenciones",
+                    message_type='comment',
+                    subtype_xmlid='mail.mt_comment', 
+                )
     def _check_to_pay_lines_account(self):
         """ TODO ver si esto tmb lo llevamos a la UI y lo mostramos como un warning.
         tmb podemos dar mas info al usuario en el error """
@@ -743,8 +781,8 @@ class Account_payment_methods(models.Model):
         return ['asset_receivable', 'liability_payable']
 class l10nArPaymentRegisterWithholding(models.Model):
     _inherit = 'l10n_ar.payment.withholding'
-    multiple_payment_id = fields.Many2one('account.payment.multiplemethods', required=True, ondelete='cascade')
-
+    multiple_payment_id = fields.Many2one('account.payment.multiplemethods', required=False, ondelete='cascade')
+    payment_id = fields.Many2one('account.payment', required=False, ondelete='cascade')
 
 class AccountPayment(models.Model):
     _inherit = 'account.payment'
@@ -755,6 +793,7 @@ class AccountPayment(models.Model):
         ondelete='restrict',  # Puedes cambiar esto según tus necesidades: 'cascade', 'restrict', etc.
         help='Selecciona el registro de pago múltiple relacionado.'
     )
+    
     
     def delete_payment(self):
         self.ensure_one()

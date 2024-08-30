@@ -5,8 +5,9 @@
         <field name="name">account.payment.multiplemethods.tree</field>
         <field name="model">account.payment.multiplemethods</field>
         <field name="arch" type="xml">
-            <tree edit="false" sample="1" decoration-info="state == 'draft'" decoration-muted="state == 'cancel'"> 
-                <field name="name"/>
+            <tree edit="false" sample="1" decoration-info="state == 'draft'" decoration-muted="state == 'cancel'" default_order="create_date desc">
+                <field name="date" string="Fecha"/>
+                <field name="display_name" string="Número"/>
                 <field name="partner_id"/>
                 <field name="payment_total"/>
                 <field name="state"  widget="badge" decoration-info="state == 'draft'" decoration-success="state == 'posted'"/>
@@ -31,6 +32,13 @@
                     <field name="state" widget="statusbar" statusbar_visible="debts,draft,posted,cancelled"/>
                 </header>
                 <sheet>
+                    <div class="oe_button_box" name="button_box" >
+                        <!-- Aquí se agrega el botón -->
+                        
+                        <button name="action_view_reconciliations" type="object" class="oe_stat_button" icon="fa-bars" invisible="not matched_move_line_ids">
+                            <span class="o_stat_text">Facturas</span>
+                        </button>
+                    </div>
                     <div class="oe_title">
                             <h1 invisible="state != 'debts'"><span>Nuevo</span></h1>
                             <h1 invisible="state != 'draft'"><span>Borrador</span></h1>
