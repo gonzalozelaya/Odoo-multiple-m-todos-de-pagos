@@ -37,7 +37,7 @@
         'security/ir.model.access.csv',
         'views/views.xml',
         'views/account_payment_register.xml',
-        'views/report_withholdings_certificate_template.xml',
+        'views/report_withholdings_template.xml',
         'views/report_payment_with_withholdings.xml',
         'views/account_journal.xml',
     ],
