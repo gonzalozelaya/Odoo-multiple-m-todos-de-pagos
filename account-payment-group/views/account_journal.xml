@@ -7,7 +7,7 @@
             <!-- Utilizar XPath para posicionar el nuevo campo después de 'l10n_latam_manual_checks' -->
             <xpath expr="//field[@name='l10n_latam_manual_checks']" position="after">
                 <!-- Agregar tu nuevo campo aquí -->
-                <field name="l10n_check_next_number"/>
+                <field name="l10n_check_next_number" string="Siguiente nro. de cheque"/>
             </xpath>
         </field>
     </record>
