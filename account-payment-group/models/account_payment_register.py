@@ -216,20 +216,7 @@ class CustomAccountPaymentRegister(models.TransientModel):
     
                     wizard.can_edit_wizard = True
                     wizard.can_group_payments = len(batch_result['lines']) != 1
-                else:
-                    # == Multiple batches: The wizard is not editable  ==
-                    wizard.update({
-                        'company_id': batches[0]['lines'][0].company_id._accessible_branches()[:1].id,
-                        'partner_id': False,
-                        'partner_type': False,
-                        'payment_type': wizard_values_from_batch['payment_type'],
-                        'source_currency_id': False,
-                        'source_amount': False,
-                        'source_amount_currency': False,
-                    })
-    
-                    wizard.can_edit_wizard = False
-                    wizard.can_group_payments = any(len(batch_result['lines']) != 1 for batch_result in batches)
+
                 
     @api.depends('can_edit_wizard')
     def _compute_communication(self):

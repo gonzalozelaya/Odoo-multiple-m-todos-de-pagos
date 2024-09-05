@@ -25,7 +25,7 @@
                     <button name="confirm_debts" type="object" string="Pagar deudas" class="btn-primary" invisible="state != 'debts' or not to_pay_move_line_ids"/>
                     <button name="avanced_payments" type="object" string="Pagos adelantados" class="btn-primary" invisible="state != 'debts' or to_pay_move_line_ids"/>
                     <button name="action_reconcile_payments" string="Publicar Pagos" type="object" class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="compute_withholdingss" string="Recalcular retenciones" type="object" invisible="state != 'draft'"/>
+                    <button name="compute_withholdingss" string="Recalcular retenciones" type="object" invisible="state != 'draft' or partner_type == 'customer'"/>
                     <button name="reset_to_draft" string="Restablecer a borrador" type="object" invisible="state != 'posted' and state != 'cancelled'"/>
                     <button name="cancel_payments" string="Cancelar" type="object" invisible="state != 'draft'"/>
                     <button name="action_send_email" string="Enviar mail" type="object" invisible="1"/>
@@ -52,8 +52,8 @@
                         </group>
                         <group>
                             <field name="company_id" invisible="1"/>
-                            <label for="retencion_ganancias"/>
-                            <div>
+                            <label for="retencion_ganancias" invisible="partner_type == 'customer'"/>
+                            <div invisible="partner_type == 'customer'">
                                 <field name="retencion_ganancias" class="oe_inline" readonly="True" required="state == 'draft'"/>
                                 <field name="regimen_ganancias_id" class="oe_inline" readonly="True" invisible="retencion_ganancias != 'nro_regimen'" required="retencion_ganancias == 'nro_regimen' and state == 'debts'"  options='{"no_open": True, "no_create": True}'/>
                             </div>
@@ -187,17 +187,33 @@
         </field>
     </record>
     
-     <!-- Definición de la acción de ventana -->
-    <record id="action_payment_multiple_methods" model="ir.actions.act_window">
+    <record id="action_payment_methods_customer" model="ir.actions.act_window">
         <field name="name">Pagos en grupo</field>
         <field name="res_model">account.payment.multiplemethods</field>
         <field name="view_mode">tree,form</field>
-        <field name="view_id" ref="view_account_payment_multiplemethods_tree"/>
+        <field name="context">{'default_partner_type': 'customer'}</field>
+        <field name="domain">[('partner_type', '=', 'customer')]</field>
     </record>
     
-    <!-- Definición del menú -->
-    <menuitem id="payment_multiple_methods" 
-              name="Pagos en grupo" 
-              parent="account.menu_action_account_payments_payable" 
-              action="action_payment_multiple_methods"/>
+    <record id="action_payment_methods_supplier" model="ir.actions.act_window">
+        <field name="name">Pagos en grupo</field>
+        <field name="res_model">account.payment.multiplemethods</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'default_partner_type': 'supplier'}</field>
+        <field name="domain">[('partner_type', '=', 'supplier')]</field>
+    </record>
+    
+     <!-- Menú para Pagos de Clientes -->
+    <menuitem id="menu_payment_methods_customer"
+              name="Pagos en grupo"
+              parent="account.menu_finance_receivables"
+              action="action_payment_methods_customer"
+              sequence="10"/>
+
+    <!-- Menú para Pagos de Proveedores -->
+    <menuitem id="menu_payment_methods_supplier"
+              name="Pagos en grupp"
+              parent="account.menu_finance_payables"
+              action="action_payment_methods_supplier"
+              sequence="10"/>
 </odoo>

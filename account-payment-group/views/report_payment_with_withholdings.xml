@@ -164,7 +164,7 @@
                     </thead>
                      <t t-set="total" t-value="0"/>
                      <t t-set="total2" t-value="0"/>
-                     <t t-foreach="o.matched_move_line_ids" t-as="factura">
+                      <t t-foreach="o.matched_move_line_ids" t-as="factura">
                         <t t-set="total" t-value="total + factura.payment_matched_amount"/>
                         <t t-set="comprobante" t-value="factura.move_id"/>
                         <tbody>
@@ -179,13 +179,29 @@
                                         </td>
                                         <td class="text-left">
                                             <t t-foreach="comprobante.invoice_payments_widget['content']" t-as="linea_pago">
-                                                <p t-out="linea_pago['ref']"/>
+                                                <t t-if="linea_pago['ref'] ">
+                                                     <!-- Verificar si el pago está en la lista de pagos -->
+                                                    <t t-set="is_payment_in_list" t-value="linea_pago['ref'] in [payment.name for payment in o.to_pay_payment_ids]"/>
+                                                    
+                                                    <t t-if="is_payment_in_list">
+                                                        <!-- Si el pago está en la lista, mostrar el nombre de referencia -->
+                                                        <p t-out="linea_pago['ref']"/>
+                                                    </t>
+                                                 </t>
                                             </t>
                                         </td>
                                         <td class="text-right o_price_total">
                                             <t t-foreach="comprobante.invoice_payments_widget['content']" t-as="linea_pago">
-                                                <t t-set="total2" t-value="total2 + linea_pago['amount']"/>
-                                                <p class="text-nowrap" t-out="linea_pago['amount']" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: comprobante.currency_id}"/>
+                                                <t t-if="linea_pago['ref'] ">
+                                                     <!-- Verificar si el pago está en la lista de pagos -->
+                                                    <t t-set="is_payment_in_list" t-value="linea_pago['ref'] in [payment.name for payment in o.to_pay_payment_ids]"/>
+                                                    
+                                                    <t t-if="is_payment_in_list">
+                                                        <!-- Si el pago está en la lista, mostrar el nombre de referencia -->
+                                                        <t t-set="total2" t-value="total2 + linea_pago['amount']"/>
+                                                        <p class="text-nowrap" t-out="linea_pago['amount']" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: comprobante.currency_id}"/>
+                                                    </t>
+                                                 </t> 
                                             </t>
                                         </td>
                                         <td class="text-right o_price_total">

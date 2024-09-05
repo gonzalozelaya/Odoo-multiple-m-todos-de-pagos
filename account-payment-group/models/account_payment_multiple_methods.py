@@ -28,7 +28,7 @@ class Account_payment_methods(models.Model):
     )
     name = fields.Char(string='',readonly=True)
     sequence_used = fields.Char(String='Sequence',readonly=True)
-    partner_type = fields.Selection([
+    partner_type = fields.Selection(string='Tipo',selection=[
         ('customer', 'Cliente'),
         ('supplier', 'Proveedor'),
     ], default='supplier', required=True,readonly=True)
@@ -38,7 +38,7 @@ class Account_payment_methods(models.Model):
     
     partner_id = fields.Many2one(
         comodel_name='res.partner',
-        string="Proveedor",
+        string="Contacto",
         readonly=False)
     commercial_partner_id = fields.Many2one(
         'res.partner', string='Commercial Entity',
@@ -118,7 +118,7 @@ class Account_payment_methods(models.Model):
     payment_type = fields.Selection([
         ('outbound', 'Send Money'),
         ('inbound', 'Receive Money'),
-    ], string='Payment Type', store=True, copy=False,default='outbound')
+    ], string='Payment Type', store=True, copy=False,default='outbound',compute='_compute_payment_type')
     
     last_journal_used = fields.Many2one(
         'account.journal',
@@ -177,6 +177,14 @@ class Account_payment_methods(models.Model):
     """
     display_name = fields.Char(string='Número', compute='_compute_display_name')
 
+    @api.depends('partner_type')
+    def _compute_payment_type(self):
+        for record in self:
+            if record.partner_type == 'supplier':
+                record.payment_type = 'outbound'
+            else:
+                record.payment_type = 'inbound'
+    
     @api.depends('name')
     def _compute_display_name(self):
         for record in self:
@@ -392,7 +400,8 @@ class Account_payment_methods(models.Model):
     def confirm_debts(self):
         for record in self:
             record.state = 'draft'
-            record._compute_withholdings()
+            if record.partner_type == 'supplier' and record.payment_type == 'outbound':
+                record._compute_withholdings()
             message = "Deuda seleccionada ${:.2f} .".format(self.selected_debt)
             # Envío del mensaje al chatter
             record.message_post(
@@ -513,7 +522,6 @@ class Account_payment_methods(models.Model):
         
         invoices = self.to_pay_move_line_ids.filtered(lambda line: not line.reconciled).sorted(key=lambda line: line.date)
         payments = self.to_pay_payment_ids.filtered(lambda payment: payment.state == 'draft')
-
         if self.is_advanced_payment:
             for payment in payments:
                 payment.action_post()
@@ -536,15 +544,20 @@ class Account_payment_methods(models.Model):
                 for invoice_line in invoices:
                     invoice_balance = invoice_line.amount_residual
                     invoice_remaining = invoice_balance
-                    if invoice_balance < 0:
-                        # Siempre agregar la línea de factura al campo to_pay_move_line_ids del pago
-                        payment.write({
-                                'to_pay_move_line_ids': [(4, invoice_line.id)]
-                            })
-                        # Determinar el monto a conciliar
-                        amount_to_reconcile = min(remaining_amount, invoice_balance)
-        
-                        remaining_amount -= amount_to_reconcile
+                    if payment.partner_type == 'customer' and payment.payment_type == 'inbound':
+                        # Lógica específica para pagos de clientes
+                        invoice_balance = invoice_line.amount_residual
+                        if invoice_balance > 0:
+                            payment.write({'to_pay_move_line_ids': [(4, invoice_line.id)]})
+                            amount_to_reconcile = min(remaining_amount, invoice_balance)
+                            remaining_amount -= amount_to_reconcile
+                    elif payment.partner_type == 'supplier' and payment.payment_type == 'outbound':
+                        # Lógica específica para pagos de proveedores
+                        invoice_balance = invoice_line.amount_residual
+                        if invoice_balance < 0:
+                            payment.write({'to_pay_move_line_ids': [(4, invoice_line.id)]})
+                            amount_to_reconcile = min(remaining_amount, abs(invoice_balance))
+                            remaining_amount -= amount_to_reconcile
     
                     # Si la factura aún tiene un saldo después de este pago, se seguirá utilizando en el próximo pago
                     if remaining_amount <= 0:
@@ -553,7 +566,10 @@ class Account_payment_methods(models.Model):
             # Publicar los pagos que han sido conciliados
             #payments.action_post()
         if not self.name:
-            self.name = self.env['ir.sequence'].next_by_code('x_reporte_de_pagos') or 'New'
+            if self.payment_type == 'inbound':
+                self.name = self.env['ir.sequence'].next_by_code('x_recibo_de_pagos') or 'New'
+            else:
+                self.name = self.env['ir.sequence'].next_by_code('x_reporte_de_pagos') or 'New'
             self.sequence_used = self.name
         self.state = 'posted'
         return
