@@ -4,6 +4,9 @@ from odoo import models, fields, api, Command, _
 from odoo.exceptions import ValidationError, UserError
 from collections import defaultdict
 import ast
+import logging
+
+_logger=logging.getLogger("__name__")
 
 class Account_payment_methods(models.Model):
     _name = 'account.payment.multiplemethods'
@@ -397,6 +400,7 @@ class Account_payment_methods(models.Model):
                 message_type='comment',
                 subtype_xmlid='mail.mt_comment'
             )
+    
     def confirm_debts(self):
         for record in self:
             record.state = 'draft'
@@ -410,10 +414,12 @@ class Account_payment_methods(models.Model):
                 message_type='comment',
                 subtype_xmlid='mail.mt_comment'
             )
+    
     def compute_withholdingss(self):
         for rec in self:
             rec._compute_withholdings()
         return
+    
     def reset_to_draft(self):
         for record in self:
             for payment in record.to_pay_payment_ids:
@@ -703,6 +709,7 @@ class Account_payment_methods(models.Model):
                     message_type='comment',
                     subtype_xmlid='mail.mt_comment', 
                 )
+    
     def _check_to_pay_lines_account(self):
         """ TODO ver si esto tmb lo llevamos a la UI y lo mostramos como un warning.
         tmb podemos dar mas info al usuario en el error """
@@ -710,8 +717,8 @@ class Account_payment_methods(models.Model):
             accounts = rec.to_pay_move_line_ids.mapped('account_id')
             if len(accounts) > 1:
                 raise ValidationError(_('To Pay Lines must be of the same account!'))
-    def _get_withholdable_amounts(
-            self, withholding_amount_type, withholding_advances):
+    
+    def _get_withholdable_amounts(self, withholding_amount_type, withholding_advances):
         """ Method to help on getting withholding amounts from account.tax
         """
         self.ensure_one()
@@ -795,10 +802,52 @@ class Account_payment_methods(models.Model):
     @api.model
     def _get_valid_payment_account_types(self):
         return ['asset_receivable', 'liability_payable']
+
 class l10nArPaymentRegisterWithholding(models.Model):
     _inherit = 'l10n_ar.payment.withholding'
+    tax_id=fields.Many2one('account.tax',required=False, ondelete='cascade',domain="[('company_id', '=', company_id)]")
     multiple_payment_id = fields.Many2one('account.payment.multiplemethods', required=False, ondelete='cascade')
+    company_id = fields.Many2one(
+        'res.company', 
+        required=False, 
+        ondelete='cascade', 
+        related="multiple_payment_id.company_id",  # Cambiamos el related aquí
+        store=True,  # Asegúrate de almacenar el campo si es necesario
+        override=True  # Indicamos que sobrescribimos el campo existente
+    )
+    currency_id=fields.Many2one(
+        'res.currency',
+        required=False,
+        ondelete='cascade',
+        related="multiple_payment_id.company_currency_id",
+        store=True,
+        override=True,
+    )
+    tax_id=fields.Many2one(
+        'account.tax',
+        ondelete='cascade',
+        required=True,
+        store=True,
+        override=True,
+    )
     payment_id = fields.Many2one('account.payment', required=False, ondelete='cascade')
+
+    @api.onchange('multiple_payment_id')
+    def _onchange_multiple_payment(self):
+        if self.multiple_payment_id:
+            self.tax_id = False
+            return {
+                'domain': {
+                    'tax_id': [
+                        ('l10n_ar_withholding_payment_type', '=', self.multiple_payment_id.partner_type),
+                        ('company_id', '=', self.multiple_payment_id.company_id.id),
+                    ]
+                }
+            }
+
+
+    
+        
 
 class AccountPayment(models.Model):
     _inherit = 'account.payment'
