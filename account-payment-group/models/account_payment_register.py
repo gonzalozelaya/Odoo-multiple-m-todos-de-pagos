@@ -96,7 +96,7 @@ class CustomAccountPaymentRegister(models.TransientModel):
             'partner_type': self.partner_type,
             'journal_id': self.journal_id.id,
             'company_id': self.company_id.id,
-            'currency_id': 19,
+            #'currency_id': 19,
             'partner_id': self.partner_id.id,
             'partner_bank_id': self.partner_bank_id.id,
             'payment_method_line_id': self.payment_method_line_id.id,
