@@ -2,7 +2,7 @@ import re
 from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError
 
-class AccountJournal(models.Model):
+class AccountMove(models.Model):
     _inherit = 'account.move'
     
     open_move_line_ids = fields.One2many(
