@@ -22,14 +22,6 @@ class AccountJournal(models.Model):
         # 2. on duplicating an invoice it's safer also
         copy=False,
     )
-    payment_group_ids = fields.Many2many(
-        'account.payment.group',
-        compute='_compute_payment_groups',
-        string='Payment Groups',
-        compute_sudo=True,
-    )
+    payment_group_ids = fields.Char('Hola')
 
-    payment_group_id = fields.Many2one(
-        related='payment_id.payment_group_id',
-        store=True,
-    )
+    payment_group_id = fields.Char('Adios')
