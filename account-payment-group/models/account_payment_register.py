@@ -55,19 +55,16 @@ class CustomAccountPaymentRegister(models.TransientModel):
                 if wizard.journal_id.l10n_check_next_number:
                     wizard.l10n_latam_check_number = wizard.journal_id.l10n_check_next_number
     
-    @api.depends('amount_received', 'company_id', 'currency_id', 'payment_date','l10n_latam_check_id')
+    @api.depends('l10n_latam_check_id')
     def _compute_amount(self):
         for wizard in self:
             if wizard.l10n_latam_check_id:
-                wizard.amount = wizard.l10n_latam_check_id.amount
-            else:
-                if wizard.amount_received:
-                    if wizard.amount_received > 0:
-                        wizard.amount = wizard.amount_received
-                    else:
-                        wizard.amount_received = 0
+                wizard.amount = wizard.l10n_latam_check_id.amount  # Si hay cheque, usa su monto
+            elif not wizard.amount:
+                if wizard.amount_received > 0:
+                    wizard.amount = wizard.amount_received
                 else:
-                    wizard.amount = None
+                    wizard.amount = 0
                     
     def _init_payments(self, to_process):
         """ Create the payments.
