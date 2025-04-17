@@ -67,7 +67,7 @@
                     <group>
                         <group>
                             <field name="is_advanced_payment" invisible="1"/>
-                            <field name="partner_id"/>
+                            <field name="partner_id" readonly="state not in ['debts','draft']"/>
                             <field name="partner_type"/>
                         </group>
                         <group>

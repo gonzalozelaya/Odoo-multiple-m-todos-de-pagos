@@ -8,7 +8,7 @@
                 <t t-set="document_letter" t-value="'X'"/>
                 <t t-set="document_legend" t-value="'Doc. no válido como factura'"/>
                 <t t-set="report_number" t-value="o.name"/>
-                <t t-set="report_name" t-value="'Orden de pago'"/>
+                <t t-set="report_name" t-value="'Orden de pago' if o.partner_type == 'supplier' else 'Recibo de pago'"/>
                 <t t-set="header_address" t-value="o.company_id.partner_id"/>
                 <t t-set="custom_footer">
                     <div class="row">
