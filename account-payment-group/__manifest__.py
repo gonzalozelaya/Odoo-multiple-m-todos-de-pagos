@@ -35,14 +35,11 @@
     # always loaded
     'data': [
         'security/ir.model.access.csv',
+        'wizards/account_payment_group_invoice_wizard.xml',
         'views/views.xml',
         'views/account_payment_register.xml',
         'views/report_withholdings_template.xml',
         'views/report_payment_with_withholdings.xml',
         'views/account_journal.xml',
-    ],
-    # only loaded in demonstration mode
-    'demo': [
-        'demo/demo.xml',
     ],
 }

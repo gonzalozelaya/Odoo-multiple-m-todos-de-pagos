@@ -4,7 +4,9 @@ from odoo import models, fields, api, Command, _
 from odoo.exceptions import ValidationError, UserError
 from collections import defaultdict
 import ast
+import logging
 
+_logger = logging.getLogger(__name__)
 class Account_payment_methods(models.Model):
     _name = 'account.payment.multiplemethods'
     _inherit = ['mail.thread', 'mail.activity.mixin']
@@ -13,7 +15,12 @@ class Account_payment_methods(models.Model):
         string='Date', 
         default=fields.Date.context_today,  # Asigna el día actual por defecto
     )
-    
+    currency_id = fields.Many2one(
+        'res.currency',
+        string='Divisa',
+        store=True,
+        default=lambda self: self.env['res.currency'].browse(19).id if self.env['res.currency'].browse(19).exists() else False
+    )
     company_id = fields.Many2one(
         comodel_name='res.company',
         string='Empresa',
@@ -522,6 +529,10 @@ class Account_payment_methods(models.Model):
         
         invoices = self.to_pay_move_line_ids.filtered(lambda line: not line.reconciled).sorted(key=lambda line: line.date)
         payments = self.to_pay_payment_ids.filtered(lambda payment: payment.state == 'draft')
+
+        credit_lines = self.to_pay_move_line_ids.filtered(lambda line: line.amount_residual > 0)
+        _logger.info(f"Lines: {credit_lines}---{invoices}")
+
         if self.is_advanced_payment:
             for payment in payments:
                 payment.action_post()
@@ -531,7 +542,6 @@ class Account_payment_methods(models.Model):
             first_payment = True  # Variable para marcar el primer pago
             # Conciliar secuencialmente
             for payment in payments:
-                
                 remaining_amount = payment.amount
                 if first_payment and self.withholding_line_ids:
                     payment.write({
@@ -547,17 +557,15 @@ class Account_payment_methods(models.Model):
                     if payment.partner_type == 'customer' and payment.payment_type == 'inbound':
                         # Lógica específica para pagos de clientes
                         invoice_balance = invoice_line.amount_residual
-                        if invoice_balance > 0:
-                            payment.write({'to_pay_move_line_ids': [(4, invoice_line.id)]})
-                            amount_to_reconcile = min(remaining_amount, invoice_balance)
-                            remaining_amount -= amount_to_reconcile
+                        payment.write({'to_pay_move_line_ids': [(4, invoice_line.id)]})
+                        amount_to_reconcile = min(remaining_amount, invoice_balance)
+                        remaining_amount -= amount_to_reconcile
                     elif payment.partner_type == 'supplier' and payment.payment_type == 'outbound':
                         # Lógica específica para pagos de proveedores
                         invoice_balance = invoice_line.amount_residual
-                        if invoice_balance < 0:
-                            payment.write({'to_pay_move_line_ids': [(4, invoice_line.id)]})
-                            amount_to_reconcile = min(remaining_amount, abs(invoice_balance))
-                            remaining_amount -= amount_to_reconcile
+                        payment.write({'to_pay_move_line_ids': [(4, invoice_line.id)]})
+                        amount_to_reconcile = min(remaining_amount, invoice_balance)
+                        remaining_amount -= amount_to_reconcile
     
                     # Si la factura aún tiene un saldo después de este pago, se seguirá utilizando en el próximo pago
                     if remaining_amount <= 0:
